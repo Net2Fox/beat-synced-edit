@@ -18,7 +18,7 @@ Feed it a song and raw footage. It analyzes the beats, maps the energy, tags eve
 
 https://github.com/user-attachments/assets/60be3f2a-6e7d-48ef-8455-f08f0387a8b2
 
-<em>1:1 montage — white-flash transitions + punch-ins, built with the bundled <code>flash_montage.py</code> template</em>
+<em>1:1 montage — white-flash transitions + punch-ins · <a href="#white-flash-montage-template">how to make one ↓</a></em>
 
 </td>
 <td width="45%" align="center">
@@ -110,25 +110,19 @@ A useful convention when comparing densities: render both and suffix them `_beat
 
 ## White-flash montage template
 
-The first demo above is a different edit style: a square montage where every item enters on a real white-flash bloom (`xfade fadewhite`). It's driven by a small `seq.json` — describe the edit, run one command, iterate by editing the JSON:
+The square demo above is a montage: each scene holds for a couple of beats (about 2.8 seconds in the demo), then blooms into the next through a white flash. You make one by describing it.
 
-```bash
-python3 flash_montage.py --seq seq.json --audio song.wav --out montage.mp4 --flash 1.0
-```
+Open this folder in [Claude Code](https://claude.com/claude-code), point it at your song and a folder of clips or photos, and say what you want:
 
-```json
-{
-  "items": [
-    {"video": "clips/skeleton.mp4", "start": 0.3, "dur": 2.9, "zoom": 1.15},
-    {"image": "stills/dog.jpg",     "dur": 2.9, "zoom": 1.35, "cy": 0.55, "motion": "sway"},
-    {"video": "clips/llama.mp4",    "start": 5.0, "dur": 2.9, "zoom": 1.35, "cx": 0.45}
-  ]
-}
-```
+> "make a white-flash montage from these six clips — punch in on each animal, flashes about a second long"
 
-Each item is a still **or** a video clip (`start` picks the source moment). Per-item controls: `zoom` punches in on a subject (`cx`/`cy` anchor the crop), `stretch` widens it, and `motion: "sway"` adds a handheld drift — on by default for stills (keeps them alive), off for videos (they already move). `--flash` sets bloom length; `--close-flash` fades the ending out to white. Total length = sum of durations minus the flash overlaps, and the audio is trimmed to match.
+> "use still frames instead of the moving clips, and give them a little handheld shake"
 
-In Claude-skill mode this template handles requests like "make a 1:1 montage of these six clips with white flashes, punch in on each subject."
+> "quicker flashes, and end it on a fade to white"
+
+Claude picks the moments from each clip, frames each subject, times the scenes to your song, and renders the finished 1:1 video. Scenes can be video clips or still photos — stills get a subtle handheld sway so they don't look frozen — and the flash length is whatever you ask for.
+
+Prefer the command line? `python3 flash_montage.py --seq seq.json --audio song.wav --out montage.mp4` — the `seq.json` format is documented at the top of the script.
 
 ---
 
