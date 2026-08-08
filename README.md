@@ -18,7 +18,7 @@ Feed it a song and raw footage. It analyzes the beats, maps the energy, tags eve
 
 https://github.com/user-attachments/assets/60be3f2a-6e7d-48ef-8455-f08f0387a8b2
 
-<em>1:1 montage — white-flash transitions + punch-ins, built via the bundled skill</em>
+<em>1:1 montage — white-flash transitions + punch-ins, built with the bundled <code>flash_montage.py</code> template</em>
 
 </td>
 <td width="45%" align="center">
@@ -74,6 +74,7 @@ EDL       ──►  render_edit.py ──►  final MP4 (extract → concat →
 | `plan_edit.py` | the matcher — high-energy clips land on energy peaks, calm clips on valleys, with anti-repetition, source spacing, and black-frame filtering |
 | `render_edit.py` | ffmpeg assembly; `--overunder` emits a stacked 960×1080 variant |
 | `vertical_style.py` | fits 16:9 output into 9:16 with a stylized squeeze + grade for TikTok / Reels / Shorts |
+| `flash_montage.py` | the white-flash montage template — 1:1 edits from stills and/or video clips with `fadewhite` transitions, punch-ins, and handheld sway (see below) |
 
 ---
 
@@ -104,6 +105,30 @@ All creative control lives in `plan_edit.py`:
 | `--pin '8=138,peak2=22'` | Pin a clip to a specific beat, peak, or valley |
 
 A useful convention when comparing densities: render both and suffix them `_beat-full` and `_beat-thinned`.
+
+---
+
+## White-flash montage template
+
+The first demo above is a different edit style: a square montage where every item enters on a real white-flash bloom (`xfade fadewhite`). It's driven by a small `seq.json` — describe the edit, run one command, iterate by editing the JSON:
+
+```bash
+python3 flash_montage.py --seq seq.json --audio song.wav --out montage.mp4 --flash 1.0
+```
+
+```json
+{
+  "items": [
+    {"video": "clips/skeleton.mp4", "start": 0.3, "dur": 2.9, "zoom": 1.15},
+    {"image": "stills/dog.jpg",     "dur": 2.9, "zoom": 1.35, "cy": 0.55, "motion": "sway"},
+    {"video": "clips/llama.mp4",    "start": 5.0, "dur": 2.9, "zoom": 1.35, "cx": 0.45}
+  ]
+}
+```
+
+Each item is a still **or** a video clip (`start` picks the source moment). Per-item controls: `zoom` punches in on a subject (`cx`/`cy` anchor the crop), `stretch` widens it, and `motion: "sway"` adds a handheld drift — on by default for stills (keeps them alive), off for videos (they already move). `--flash` sets bloom length; `--close-flash` fades the ending out to white. Total length = sum of durations minus the flash overlaps, and the audio is trimmed to match.
+
+In Claude-skill mode this template handles requests like "make a 1:1 montage of these six clips with white flashes, punch in on each subject."
 
 ---
 

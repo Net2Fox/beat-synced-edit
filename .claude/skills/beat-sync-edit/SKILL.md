@@ -31,6 +31,24 @@ python3 vertical_style.py <mp4>                  # optional 9:16 squeeze + grade
   `--segment 2|3` picks the second/third-best highlight segment.
 - `render_edit.py --overunder` emits the stacked 960x1080 "3D" variant.
 
+## The white-flash montage template (separate edit style)
+
+When the user asks for a MONTAGE — a 1:1 sequence of held shots/stills with
+white-flash transitions ("white flash between each clip", "photo narrative",
+"meme montage") — use `flash_montage.py` instead of the beat pipeline:
+
+```
+python3 flash_montage.py --seq seq.json --audio <song> --out out.mp4 --flash 1.0
+```
+
+Author the seq.json yourself from the user's description: one item per shot,
+`{"video": path, "start": t, "dur": d}` or `{"image": path, "dur": d}`, with
+`zoom`/`cx`/`cy` to punch in on each subject (LOOK at a frame first to place
+cx/cy), `stretch` for width hits, `motion: "sway"` for handheld feel (default
+on stills, off for videos). Set `dur` to a beat-multiple of the song's tempo
+(from beat_map.py) so flashes land musically — e.g. 4 beats per slot. Iterate
+by editing the seq.json, not by rebuilding commands.
+
 ## What the user can ask for (translate words → workflow)
 
 - "punchier / more cuts" → `--beat-stride 1` (default), or lower clip_tag
