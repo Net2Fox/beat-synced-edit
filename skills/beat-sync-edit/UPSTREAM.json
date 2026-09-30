@@ -2,10 +2,11 @@
   "repository": "https://github.com/ZiadAbdelkarim/beat-synced-edit",
   "commit": "48c09c92ee69c2d89b7e44b146bbd7b9c26fff08",
   "license": "MIT",
-  "adaptation": "Self-contained Codex skill; bundled scripts; isolated Python environment; UTF-8 launch guidance; Pillow for contact sheets.",
+  "adaptation": "Self-contained Codex skill with persistent frame-exact project editing, mixed-media ingestion, reviewed semantic selection, musical sections, subject tracking, smooth retiming, presets, preview and revisions.",
   "local_fixes": [
     "Unicode Windows thumbnail paths via imencode/tofile",
     "Rebase EDL and audio start to the first selected beat",
     "Explicit OpenCV dependency without removed scenedetect extra"
-  ]
+  ],
+  "project_schema_version": 2
 }

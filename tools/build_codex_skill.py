@@ -10,6 +10,8 @@ SKILL = ROOT / "skills" / "beat-sync-edit"
 SCRIPTS = (
     "beat_map.py", "clip_tag.py", "plan_edit.py", "render_edit.py",
     "vertical_style.py", "flash_montage.py", "overunder_stack.py",
+    "edit_project.py", "project_workspace.py", "project_plan.py", "edit_presets.py",
+    "media_library.py", "smart_reframe.py", "project_render.py",
 )
 RESOURCES = ("LICENSE", "requirements.txt", "requirements.lock.txt", "UPSTREAM.json")
 

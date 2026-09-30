@@ -1,8 +1,9 @@
 # Beat-Synced Edit — Codex & Claude Code
 
 This fork of [ZiadAbdelkarim/beat-synced-edit](https://github.com/ZiadAbdelkarim/beat-synced-edit)
-adds a self-contained **Codex skill**, Windows/Unicode fixes, and corrected
-first-beat audio alignment. The original CLI and Claude Code skill remain available.
+adds a self-contained **Codex skill** and a persistent project editor for precise
+music-synced edits, mixed media, subject tracking, speed ramps and targeted revisions.
+The original CLI and Claude Code skill remain available.
 
 ## Install for Codex
 
@@ -15,7 +16,7 @@ Then create its local Python environment and install requirements.txt.
 ```
 
 Or copy `skills/beat-sync-edit` into your personal Codex skills directory.
-Install the whole skill directory: it includes the seven Python scripts, requirements
+Install the whole skill directory: it includes the Python tools, workflow references, requirements
 and MIT license. The skill's `SKILL.md` describes the environment setup.
 Python and FFmpeg/ffprobe are required; the `.venv` is created on the target machine.
 
@@ -23,6 +24,46 @@ Example request after installation:
 
 > Use $beat-sync-edit. Create a 25-second edit from my footage set to this track:
 > 9:16, 1080×1920, cuts on the beat, and quick zooms on the drop. Export as MP4.
+
+### Project editor
+
+| Capability | Behavior |
+|---|---|
+| Exact duration | Plans a contiguous frame-based timeline and verifies the rendered frame count. Shortages use unused ranges, longer/slower shots, or explicitly allowed repeats. |
+| Mixed sources | Imports videos, photos, folders and ZIPs with persistent absolute source paths and unique IDs. Normalizes dimensions, frame rates and orientation during rendering. |
+| Musical structure | Estimates intro, build, drop and outro from energy rises and beats. Accepts explicit section boundaries. |
+| Content-aware selection | Uses Codex-reviewed object tags, shot sizes, action timestamps and quality labels, plus visual fingerprints to favor varied shots. |
+| Subject-aware framing | Tracks an explicitly chosen region, or uses face/motion cues. Smooths the camera path; fixed crops and letterboxing are also available. |
+| Smooth speed ramps | Interpolates a speed curve across each shot and can anchor a source action to a musical beat without changing output duration. |
+| Style recipes | `cinematic`, `car`, `gaming` and `product` control pace, preferred shots, color, accents and retiming. Settings remain editable. |
+| Preview and revisions | Creates a smaller MP4 and offline HTML review page. Replace a shot, change its length, remove effects, adjust framing/speed, or reorder; unchanged shots use the render cache. |
+
+The project workflow is documented in
+[the skill reference](skills/beat-sync-edit/references/project-workflow.md).
+It includes the visual annotation step, section and revision JSON, and PowerShell
+examples. A minimal CLI sequence, using the skill environment or an interpreter
+with `requirements.txt` installed:
+
+```sh
+python -X utf8 edit_project.py analyze /path/to/footage --work work/library
+python -X utf8 edit_project.py music /path/to/song.wav --duration 25 -o work/beats.json
+# View the contact sheets; write observations using their actual clip IDs.
+python -X utf8 edit_project.py annotate work/library/library.json --annotations work/annotations.json
+python -X utf8 edit_project.py plan --library work/library/library.json --beats work/beats.json --duration 25 --preset car -o work/project.json
+python -X utf8 edit_project.py preview work/project.json -o work/preview.mp4
+python -X utf8 edit_project.py revise work/project.json --operations work/revisions.json
+python -X utf8 edit_project.py render work/project.json -o outputs/edit.mp4
+```
+
+Save `project.json` and retain the source media/imports to resume later. Changes
+keep recoverable project snapshots under `.history/`. Preview HTML is local and
+uses no CDN; its controls export revisions for the CLI or Codex to apply.
+
+Duration is quantized to the nearest output frame (25 seconds at 30 fps is exactly
+750 frames). Automatic musical sections and tracking need review. Semantic tags
+come from actual visual inspection/annotations, not from brightness heuristics.
+Slow motion uses neighboring-frame blending, not optical-flow or generative
+interpolation. The tool does not invent missing footage or silently repeat it.
 
 ### What changed in this fork
 
@@ -37,9 +78,9 @@ Example request after installation:
   remain available when requested.
 
 `requirements.lock.txt` is the tested Windows / Python 3.12 snapshot. Use
-`requirements.txt` for dependency resolution on other platforms. The planner may
-stop early if it runs out of distinct scenes; inspect the edit plan and rendered
-duration before treating a cut as finished.
+`requirements.txt` for dependency resolution on other platforms. The original
+`plan_edit.py` retains its legacy behavior and may stop early when scenes run
+out; use `edit_project.py` for the exact-duration project workflow.
 
 ### Development and verification
 
@@ -51,6 +92,7 @@ python tools/build_codex_skill.py
 python tools/build_codex_skill.py --check
 python -X utf8 -m unittest discover -s tests -p "test_*.py"
 python -X utf8 tests/smoke_test.py
+python -X utf8 tests/project_smoke_test.py
 ```
 
 Run the tests with an interpreter that has `requirements.txt` installed and
@@ -59,6 +101,10 @@ ignored `work/smoke/`, including Cyrillic filenames. It exercises analysis,
 contact sheets, planning, rendering, white-flash transitions and 1080×1920 export
 with audio. It does not need personal videos. It also accepts `--skill-dir` to
 check a separately installed copy and `--work-dir` for test outputs.
+The project tests additionally cover mixed sources, annotations, safe persistent
+ZIP imports, musical sections, source reuse policies, tracked subjects, ramps,
+rotated full-HD output, revision history and cache invalidation. The project smoke
+test exercises the complete CLI workflow with generated assets.
 
 Original attribution and license are retained in [LICENSE](LICENSE).
 The source revision and adaptation details are recorded in [UPSTREAM.json](UPSTREAM.json).

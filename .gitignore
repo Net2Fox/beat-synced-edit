@@ -9,6 +9,8 @@ __pycache__/
 .pytest_cache/
 work/
 outputs/
+.history/
+.beat-sync-cache/
 .env
 .env.*
 *.mp4
