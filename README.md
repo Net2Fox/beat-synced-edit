@@ -21,8 +21,8 @@ Python and FFmpeg/ffprobe are required; the `.venv` is created on the target mac
 
 Example request after installation:
 
-> Используй $beat-sync-edit. Сделай эдит на 25 секунд из моих видео под этот трек:
-> 9:16, 1080×1920, склейки в бит, короткие зумы на дропе. Экспортируй MP4.
+> Use $beat-sync-edit. Create a 25-second edit from my footage set to this track:
+> 9:16, 1080×1920, cuts on the beat, and quick zooms on the drop. Export as MP4.
 
 ### What changed in this fork
 
