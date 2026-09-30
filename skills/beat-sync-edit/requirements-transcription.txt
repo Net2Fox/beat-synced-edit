@@ -1,0 +1,4 @@
+# Optional local speech recognition. Titles and SRT/VTT do not require this.
+faster-whisper>=1.1,<2
+# PyAV 19 removed the metadata_errors argument used by faster-whisper 1.2.1.
+av>=11,<19

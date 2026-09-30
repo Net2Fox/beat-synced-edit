@@ -12,8 +12,9 @@ SCRIPTS = (
     "vertical_style.py", "flash_montage.py", "overunder_stack.py",
     "edit_project.py", "project_workspace.py", "project_plan.py", "edit_presets.py",
     "media_library.py", "smart_reframe.py", "project_render.py",
+    "text_overlay.py", "text_project.py", "text_commands.py", "subtitle_tools.py", "speech_transcribe.py",
 )
-RESOURCES = ("LICENSE", "requirements.txt", "requirements.lock.txt", "UPSTREAM.json")
+RESOURCES = ("LICENSE", "requirements.txt", "requirements.lock.txt", "requirements-transcription.txt", "UPSTREAM.json")
 
 
 def main():

@@ -732,6 +732,9 @@ def validate_plan(plan):
                 raise ValueError("subject bbox exceeds frame bounds")
     if position != frames:
         raise ValueError("Shots do not cover duration_frames exactly")
+    if any(key in plan for key in ("titles", "subtitles", "title_style", "subtitle_style")):
+        from text_overlay import validate_text_tracks
+        validate_text_tracks(plan)
     return plan
 
 

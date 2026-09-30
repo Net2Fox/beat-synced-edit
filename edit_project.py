@@ -84,10 +84,15 @@ def parser():
     inspect = sub.add_parser("inspect", help="Validate a saved project and summarize its timeline")
     inspect.add_argument("project")
     sub.add_parser("presets", help="List the actual pace, effect and color settings")
+    from text_commands import register_text_commands
+    register_text_commands(sub)
     return p
 
 
 def run(args):
+    from text_commands import TEXT_COMMANDS, run_text_command
+    if args.command in TEXT_COMMANDS:
+        return run_text_command(args)
     if args.command == "analyze":
         from media_library import analyze_library
         work = Path(args.work).resolve()

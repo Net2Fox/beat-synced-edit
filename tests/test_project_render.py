@@ -109,6 +109,31 @@ class RenderIntegrationTests(unittest.TestCase):
         self.assertEqual(revised["cache_hits"], 2)
         self.assertEqual(revised["frames"], 45)
 
+    def test_text_only_revisions_keep_shot_caches_exact_frames_and_audio(self):
+        plan = self.make_plan()
+        plan["titles"] = [{"id": "title", "text": "Привет, мир!", "start_frame": 0, "end_frame": 30}]
+        plan["subtitles"] = [{"id": "caption", "text": "Текст поверх видео", "start_frame": 10, "end_frame": 45}]
+        cache = self.work/"cache-text"
+        first = render_project(plan, self.work/"text-first.mp4", cache_dir=cache)
+        plan["titles"][0]["text"] = "Новый заголовок"
+        plan["subtitle_style"] = {"color": "#FFFF00", "animation": "fade", "fade_frames": 3}
+        second = render_project(plan, self.work/"text-second.mp4", cache_dir=cache)
+        self.assertEqual((first["frames"], second["frames"], second["cache_hits"]), (45, 45, 3))
+        self.assertEqual((second["duration"], second["audio_sample_rate"]), (1.5, 48000))
+        frames = []
+        for path in (self.work/"text-first.mp4", self.work/"text-second.mp4"):
+            capture = cv2.VideoCapture(str(path))
+            capture.set(cv2.CAP_PROP_POS_FRAMES, 15)
+            ok, frame = capture.read()
+            capture.release()
+            self.assertTrue(ok)
+            frames.append(frame.astype(float))
+        self.assertGreater(np.abs(frames[0]-frames[1]).mean(), 1)
+        plan.pop("titles")
+        plan.pop("subtitles")
+        third = render_project(plan, self.work/"text-removed.mp4", cache_dir=cache)
+        self.assertEqual((third["cache_hits"], third["frames"]), (3, 45))
+
     def test_preview_manual_subject_crop_and_contain(self):
         plan = self.make_plan()
         edit = copy.deepcopy(plan["edits"][-1])

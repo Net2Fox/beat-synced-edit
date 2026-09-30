@@ -126,6 +126,7 @@ def apply_revisions(plan, operations):
     A duration edit borrows frames from the following shot, or an explicit donor.
     """
     from project_plan import validate_plan
+    from text_project import TEXT_OPERATIONS, apply_text_operation
 
     validate_plan(plan)
     if not isinstance(operations, list) or not operations:
@@ -138,7 +139,9 @@ def apply_revisions(plan, operations):
         if not isinstance(operation, dict):
             raise ValueError("Each revision must be an object")
         kind = operation.get("op")
-        if kind == "reorder":
+        if kind in TEXT_OPERATIONS:
+            apply_text_operation(result, operation)
+        elif kind == "reorder":
             order = operation.get("order", [])
             if len(order) != len(edits) or set(order) != {e["id"] for e in edits}:
                 raise ValueError("reorder must contain every shot id exactly once")
@@ -247,6 +250,7 @@ def review_html(plan, video_path, output_path):
     except ValueError:
         media_url = video.as_uri()
     data = json.dumps({"fps": plan["output"]["fps"], "edits": plan["edits"],
+                       "titles": plan.get("titles", []), "subtitles": plan.get("subtitles", []),
                        "clips": [{k: c.get(k) for k in ("id", "source", "start", "end", "tags", "shot_type")}
                                  for c in plan.get("clips", [])]}, ensure_ascii=False).replace("<", "\\u003c")
     page = '''<!doctype html><html lang="en"><meta charset="utf-8">
@@ -267,6 +271,11 @@ textarea{width:95%;height:180px;font:13px monospace}.muted{color:#a6b8cf}#status
 <label for="replacement">Replacement clip</label><select id="replacement"></select><button id="replace">Queue replacement</button>
 <label for="seconds">Shot duration (seconds; borrow from adjacent shot)</label><input id="seconds" type="number" min="0.1" step="0.1"><button id="duration">Queue duration</button>
 <p><button id="flash">Remove all flashes</button> <button id="download">Download revisions.json</button></p>
+<details><summary>Edit titles and subtitles</summary>
+<label for="textcue">Text cue</label><select id="textcue"></select>
+<label for="cuetext">Text</label><textarea id="cuetext" style="height:80px"></textarea>
+<label for="cuestart">Start / end (seconds)</label><input id="cuestart" type="number" min="0" step="0.01"><input id="cueend" type="number" min="0" step="0.01">
+<p><button id="textsave">Queue text change</button> <button id="textremove">Remove text cue</button></p></details>
 <label for="operations">Queued revisions</label><textarea id="operations" readonly>[]</textarea><p id="status" role="status"></p>
 <p class="muted">Changes apply on the next render. Give revisions.json to Codex, or run:<br><code>edit_project.py revise project.json --operations revisions.json</code><br>Then render a new preview.</p></section></main>
 <script>const data=DATA,player=document.getElementById('player'),shot=document.getElementById('shot'),queue=[];
@@ -278,6 +287,12 @@ shot.onchange=()=>selectShot(true);selectShot(false);
 el('replace').onclick=()=>{if(el('replacement').value)add({op:'replace',shot:shot.value,clip_id:el('replacement').value})};
 el('duration').onclick=()=>{let seconds=Number(el('seconds').value);if(Number.isFinite(seconds)&&seconds>0)add({op:'duration',shot:shot.value,seconds});else el('status').textContent='Enter a positive duration.'};
 el('flash').onclick=()=>add({op:'effects',all:true,values:{flash:0}});
+const cues=[...data.titles.map(c=>({...c,track:'title'})),...data.subtitles.map(c=>({...c,track:'subtitle'}))];
+cues.forEach((c,i)=>el('textcue').add(new Option(`${c.track} · ${c.id} · ${c.text.slice(0,36)}`,String(i))));
+function selectCue(seek){let c=cues[Number(el('textcue').value)];if(!c)return;el('cuetext').value=c.text;el('cuestart').value=(c.start_frame/data.fps).toFixed(3);el('cueend').value=(c.end_frame/data.fps).toFixed(3);if(seek)player.currentTime=c.start_frame/data.fps}
+el('textcue').onchange=()=>selectCue(true);selectCue(false);
+el('textsave').onclick=()=>{let c=cues[Number(el('textcue').value)];if(!c)return;let start=Number(el('cuestart').value),end=Number(el('cueend').value),text=el('cuetext').value;if(!text.trim()||!Number.isFinite(start)||!Number.isFinite(end)||start<0||end<=start){el('status').textContent='Enter text and a valid start/end range.';return}let values={start,end};if(text!==c.text)values.text=text;add({op:c.track+'_update',id:c.id,values})};
+el('textremove').onclick=()=>{let c=cues[Number(el('textcue').value)];if(c)add({op:c.track+'_remove',id:c.id})};
 el('download').onclick=()=>{if(!queue.length){el('status').textContent='Queue a change first.';return}let u=URL.createObjectURL(new Blob([JSON.stringify(queue,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=u;a.download='revisions.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};</script></html>'''
     # Substitute the JSON first so a filename containing DATA cannot become JS.
     # The distinct marker also avoids replacing user-controlled annotation text.

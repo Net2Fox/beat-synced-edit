@@ -37,6 +37,9 @@ Example request after installation:
 | Smooth speed ramps | Interpolates a speed curve across each shot and can anchor a source action to a musical beat without changing output duration. |
 | Style recipes | `cinematic`, `car`, `gaming` and `product` control pace, preferred shots, color, accents and retiming. Settings remain editable. |
 | Preview and revisions | Creates a smaller MP4 and offline HTML review page. Replace a shot, change its length, remove effects, adjust framing/speed, or reorder; unchanged shots use the render cache. |
+| Titles | Timed Unicode text with fonts, outline, translucent background, safe margins, wrapping and fade/slide animations. |
+| Subtitles | Import/export SRT and WebVTT, edit phrases and timing, shift the track, and burn captions into previews and final MP4 without rebuilding cached shots. |
+| Automatic captions | Optional local Faster Whisper transcription, phrase segmentation and word highlighting. Saves the raw transcript for review and correction. |
 
 The project workflow is documented in
 [the skill reference](skills/beat-sync-edit/references/project-workflow.md).
@@ -64,6 +67,32 @@ Duration is quantized to the nearest output frame (25 seconds at 30 fps is exact
 come from actual visual inspection/annotations, not from brightness heuristics.
 Slow motion uses neighboring-frame blending, not optical-flow or generative
 interpolation. The tool does not invent missing footage or silently repeat it.
+
+### Titles and subtitles
+
+Ask Codex, for example:
+
+> Use $beat-sync-edit. Add an animated opening title, transcribe the Russian
+> speech into short captions, highlight the spoken words in yellow, and export
+> the video plus an SRT file. Keep the existing edit and music timing.
+
+```sh
+python -X utf8 edit_project.py title work/project.json --text "A new beginning" --start 0 --end 2 --animation fade
+python -X utf8 edit_project.py subtitles-import work/project.json captions.srt --preset boxed
+# Optional recognition packages; audio stays local, model downloads on first use.
+python -m pip install -r requirements-transcription.txt
+python -X utf8 edit_project.py subtitles-transcribe work/project.json --language ru --model small --preset karaoke
+python -X utf8 edit_project.py subtitles-export work/project.json -o outputs/captions.vtt
+python -X utf8 edit_project.py render work/project.json -o outputs/captioned.mp4
+```
+
+Import/transcription replaces the caption track in a recoverable project
+revision. Recognition uses the audible soundtrack range by default; correct
+misheard text before delivery. SRT/VTT sidecars preserve text and cue times;
+styling and animations appear in the rendered MP4. Word highlighting requires
+word timestamps from recognition or explicit annotations. The full
+[text guide](skills/beat-sync-edit/references/text-and-subtitles.md) covers
+alignment, local model caches, styles, the review page and targeted revisions.
 
 ### What changed in this fork
 
@@ -93,6 +122,7 @@ python tools/build_codex_skill.py --check
 python -X utf8 -m unittest discover -s tests -p "test_*.py"
 python -X utf8 tests/smoke_test.py
 python -X utf8 tests/project_smoke_test.py
+python -X utf8 tests/text_smoke_test.py
 ```
 
 Run the tests with an interpreter that has `requirements.txt` installed and
@@ -105,6 +135,8 @@ The project tests additionally cover mixed sources, annotations, safe persistent
 ZIP imports, musical sections, source reuse policies, tracked subjects, ramps,
 rotated full-HD output, revision history and cache invalidation. The project smoke
 test exercises the complete CLI workflow with generated assets.
+The text smoke test checks Cyrillic titles, SRT/VTT interchange, caption
+revisions, rendering and shot cache reuse. It does not download speech models.
 
 Original attribution and license are retained in [LICENSE](LICENSE).
 The source revision and adaptation details are recorded in [UPSTREAM.json](UPSTREAM.json).

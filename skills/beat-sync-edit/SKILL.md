@@ -1,6 +1,6 @@
 ---
 name: beat-sync-edit
-description: Create and revise music-synced video edits from videos and photos for TikTok, YouTube Shorts and Reels. Use for montage, beat-sync, эдит под музыку, монтаж в бит, subject tracking, speed ramps and vertical export.
+description: Create and revise music-synced video edits from videos and photos for TikTok, YouTube Shorts and Reels, with titles and subtitles. Use for montage, beat-sync, эдит под музыку, монтаж в бит, титры, субтитры, captions, speech transcription, subject tracking, speed ramps and vertical export.
 ---
 
 # Beat-Sync Edit
@@ -53,6 +53,13 @@ speed curves, preview review and targeted revisions.
 5. Verify duration, frame count, dimensions and audio; inspect representative
    frames. Deliver the MP4 and summarize the actual result and anything not
    verified through playback.
+
+For titles, captions, SRT/VTT files or automatic subtitles, read
+[text-and-subtitles.md](references/text-and-subtitles.md). Add text to the saved
+project, preview it and correct wording/timing before export. Use local speech
+recognition only for audio that belongs in the requested edit; review its output.
+The optional speech requirements and model are separate from the base install.
+Text-only revisions preserve cached shots and the soundtrack.
 
 Duration is exact to one output frame. Source footage is not repeated unless
 allowed. Shortages must be resolved through available ranges, slower/longer

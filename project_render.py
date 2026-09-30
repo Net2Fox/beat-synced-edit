@@ -21,6 +21,8 @@ import uuid
 import cv2
 import numpy as np
 
+from text_overlay import TextCompositor, validate_text_tracks
+
 RENDER_VERSION = 1
 
 
@@ -385,7 +387,51 @@ def _validate_plan(plan):
                 raise ValueError("Subject box must fit inside the normalized frame")
     if cursor != _integer(plan["duration_frames"], "duration_frames"):
         raise ValueError("Edit durations do not sum to the requested duration_frames")
+    validate_text_tracks(plan)
     return width, height, fps, cursor
+
+
+def _composite_tracks(manifest, output, compositor, width, height, fps, count, preview):
+    """Burn text after cached shots, so changing a caption never rerenders shots."""
+    with tempfile.TemporaryFile() as decode_log, tempfile.TemporaryFile() as encode_log:
+        decoder = subprocess.Popen([
+            "ffmpeg", "-v", "error", "-nostdin", "-threads", "1", "-f", "concat", "-safe", "0",
+            "-i", str(manifest), "-an", "-sn", "-dn", "-vsync", "0", "-threads", "1",
+            "-f", "rawvideo", "-pix_fmt", "bgr24", "pipe:1"], stdout=subprocess.PIPE, stderr=decode_log)
+        encoder = None
+        try:
+            encoder = subprocess.Popen([
+                "ffmpeg", "-y", "-v", "error", "-nostdin", "-f", "rawvideo", "-pix_fmt", "bgr24",
+                "-s:v", f"{width}x{height}", "-r", str(fps), "-i", "pipe:0", "-an", "-frames:v", str(count),
+                "-c:v", "libx264", "-preset", "ultrafast" if preview else "fast", "-crf", "27" if preview else "18",
+                "-pix_fmt", "yuv420p", "-vf", "setsar=1", "-video_track_timescale", str(fps*1000),
+                "-movflags", "+faststart", str(output)], stdin=subprocess.PIPE, stderr=encode_log)
+            size = width*height*3
+            for index in range(count):
+                data = decoder.stdout.read(size)
+                if len(data) != size:
+                    raise RuntimeError(f"Text assembly decoded only {index} complete frames; expected {count}")
+                frame = np.frombuffer(data, np.uint8).reshape(height, width, 3)
+                composed = compositor.apply(frame, index)
+                encoder.stdin.write(np.ascontiguousarray(composed).tobytes())
+            if decoder.stdout.read(1):
+                raise RuntimeError("Text assembly decoded more frames than the project timeline")
+            decoder.stdout.close()
+            encoder.stdin.close()
+            for process, log, label in ((decoder, decode_log, "decode"), (encoder, encode_log, "encode")):
+                if process.wait():
+                    log.seek(0)
+                    raise RuntimeError(f"Text assembly {label} failed: {log.read().decode('utf-8', 'replace')[-4000:]}")
+        finally:
+            for process in (decoder, encoder):
+                if process is None:
+                    continue
+                for stream in (process.stdin, process.stdout):
+                    if stream is not None and not stream.closed:
+                        stream.close()
+                if process.poll() is None:
+                    process.terminate()
+                process.wait()
 
 
 def render_project(plan, output_path, preview=False, cache_dir=None):
@@ -409,6 +455,7 @@ def render_project(plan, output_path, preview=False, cache_dir=None):
         else:  # Unusual relatively-prime aspect ratios require pixel rounding.
             factor = min(1, 360/width, 640/height)
             width, height = max(2, int(width*factor)//2*2), max(2, int(height*factor)//2*2)
+    compositor = TextCompositor(plan, width, height) if plan.get("titles") or plan.get("subtitles") else None
     duration = total_frames/fps
     output_path = Path(output_path).resolve()
     if output_path.suffix.lower() != ".mp4":
@@ -471,7 +518,13 @@ def render_project(plan, output_path, preview=False, cache_dir=None):
         manifest.write_text("".join("file '"+p.as_posix().replace("'", "'\\''")+"'\n" for p in shots), encoding="utf-8")
         temporary = output_path.with_name(f".{output_path.stem}.{uuid.uuid4().hex}.tmp.mp4")
         try:
-            args = ["ffmpeg", "-y", "-v", "error", "-nostdin", "-f", "concat", "-safe", "0", "-i", str(manifest)]
+            args = ["ffmpeg", "-y", "-v", "error", "-nostdin"]
+            if compositor is not None:
+                composed = Path(scratch)/"composited.mp4"
+                _composite_tracks(manifest, composed, compositor, width, height, fps, total_frames, preview)
+                args += ["-i", str(composed)]
+            else:
+                args += ["-f", "concat", "-safe", "0", "-i", str(manifest)]
             if audio.get("loop", False):
                 args += ["-stream_loop", "-1"]
             args += ["-ss", f"{audio_start:.9f}", "-i", str(audio_path), "-map", "0:v:0", "-map", "1:a:0",
