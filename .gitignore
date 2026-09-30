@@ -1,2 +1,18 @@
 examples/preview_*.mp4
 .DS_Store
+
+# Local environments, analysis and renders
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+work/
+outputs/
+.env
+.env.*
+*.mp4
+*.mov
+*.webm
+*.mp3
+*.wav

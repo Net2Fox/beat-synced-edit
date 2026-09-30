@@ -1,4 +1,71 @@
-# Beat-Synced Edit — Claude Code Automation
+# Beat-Synced Edit — Codex & Claude Code
+
+This fork of [ZiadAbdelkarim/beat-synced-edit](https://github.com/ZiadAbdelkarim/beat-synced-edit)
+adds a self-contained **Codex skill**, Windows/Unicode fixes, and corrected
+first-beat audio alignment. The original CLI and Claude Code skill remain available.
+
+## Install for Codex
+
+Ask Codex:
+
+```text
+$skill-installer Install the skill from
+https://github.com/Net2Fox/beat-synced-edit/tree/main/skills/beat-sync-edit
+Then create its local Python environment and install requirements.txt.
+```
+
+Or copy `skills/beat-sync-edit` into your personal Codex skills directory.
+Install the whole skill directory: it includes the seven Python scripts, requirements
+and MIT license. The skill's `SKILL.md` describes the environment setup.
+Python and FFmpeg/ffprobe are required; the `.venv` is created on the target machine.
+
+Example request after installation:
+
+> Используй $beat-sync-edit. Сделай эдит на 25 секунд из моих видео под этот трек:
+> 9:16, 1080×1920, склейки в бит, короткие зумы на дропе. Экспортируй MP4.
+
+### What changed in this fork
+
+- A portable [Codex skill](skills/beat-sync-edit/SKILL.md), with UTF-8 PowerShell
+  commands and an isolated environment instead of global Python packages.
+- Thumbnail and contact-sheet output works with Cyrillic Windows paths.
+- The edit plan and soundtrack start at the same selected beat, removing the
+  original leading-offset mismatch between music and the concatenated picture.
+- Pillow is an explicit dependency; OpenCV is installed explicitly without the
+  removed `scenedetect[opencv]` extra.
+- Vertical-only requests use `cover` and `grade none`; squeeze and color grades
+  remain available when requested.
+
+`requirements.lock.txt` is the tested Windows / Python 3.12 snapshot. Use
+`requirements.txt` for dependency resolution on other platforms. The planner may
+stop early if it runs out of distinct scenes; inspect the edit plan and rendered
+duration before treating a cut as finished.
+
+### Development and verification
+
+The root Python files are the source of truth. After changing them, rebuild the
+installable copy and verify it:
+
+```sh
+python tools/build_codex_skill.py
+python tools/build_codex_skill.py --check
+python -X utf8 -m unittest discover -s tests -p "test_*.py"
+python -X utf8 tests/smoke_test.py
+```
+
+Run the tests with an interpreter that has `requirements.txt` installed and
+FFmpeg/ffprobe on PATH. The smoke test generates its own footage and rhythm in
+ignored `work/smoke/`, including Cyrillic filenames. It exercises analysis,
+contact sheets, planning, rendering, white-flash transitions and 1080×1920 export
+with audio. It does not need personal videos. It also accepts `--skill-dir` to
+check a separately installed copy and `--work-dir` for test outputs.
+
+Original attribution and license are retained in [LICENSE](LICENSE).
+The source revision and adaptation details are recorded in [UPSTREAM.json](UPSTREAM.json).
+
+---
+
+## Original project
 
 Automatic beat-synced video editing.
 
