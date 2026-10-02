@@ -1,13 +1,20 @@
 """Behavioral coverage for exact duration, consent, musical structure and selection."""
 
 from copy import deepcopy
+from contextlib import redirect_stdout
+import io
+import json
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from edit_presets import get_preset, list_presets
-from project_plan import build_plan, validate_plan
+from project_plan import build_plan, validate_plan, validate_slow_motion_policy, speed_bounds
+
+
+SLOW_REQUEST = {"slow_motion_prompt": "Use interpolated slow motion for this edit.", "interpolation": "optical_flow"}
 
 
 def inputs(lengths=(20, 20, 20, 20), image=False):
@@ -36,7 +43,7 @@ class ExactDurationTests(unittest.TestCase):
 
     def test_extend_uses_unused_video_without_repeating(self):
         beatmap, library = inputs((3, 3))
-        plan = build_plan(beatmap, library, duration=10, fps=30)
+        plan = build_plan(beatmap, library, duration=10, fps=30, **SLOW_REQUEST)
         self.assertEqual(plan["duration_frames"], 300)
         self.assertTrue(plan["diagnostics"])
         consumed = sum(shot["source_end"] - shot["source_start"] for shot in plan["edits"])
@@ -82,7 +89,7 @@ class ExactDurationTests(unittest.TestCase):
 
     def test_fractional_scene_lengths_still_cover_the_complete_output(self):
         beatmap, library = inputs((9.819311630365577, 4.297129940790273, 2.15837673339859, .6874612854113502))
-        plan = build_plan(beatmap, library, duration=17.18652707638857, preset="car")
+        plan = build_plan(beatmap, library, duration=17.18652707638857, preset="car", **SLOW_REQUEST)
         self.assertEqual(sum(e["duration_frames"] for e in plan["edits"]), 516)
 
     def test_overlapping_analyzed_clips_do_not_inflate_available_source(self):
@@ -212,6 +219,107 @@ class ValidationTests(unittest.TestCase):
         beatmap, library = inputs()
         with self.assertRaisesRegex(ValueError, "120"):
             build_plan(beatmap, library, duration=1, fps=121)
+
+
+class SlowMotionPolicyTests(unittest.TestCase):
+    def test_every_default_preset_keeps_actual_speed_at_least_one(self):
+        beatmap, library = inputs()
+        library["clips"][0]["action_time"] = 10
+        for preset in list_presets():
+            plan = build_plan(beatmap, library, duration=12, preset=preset)
+            self.assertFalse(plan["policies"]["allow_slow_motion"])
+            self.assertEqual(plan["policies"]["interpolation"], "none")
+            self.assertEqual(plan["policies"]["min_speed"], 1)
+            for shot in plan["edits"]:
+                self.assertGreaterEqual(speed_bounds(shot, shot["duration_frames"] / 30)[0], 1 - 1e-7)
+
+    def test_shortage_never_grants_slow_motion_implicitly(self):
+        beatmap, library = inputs((3, 3))
+        with self.assertRaisesRegex(ValueError, "Add footage/photos") as caught:
+            build_plan(beatmap, library, duration=10)
+        self.assertNotIn("lower min_speed", str(caught.exception))
+
+    def test_prompt_and_interpolation_are_both_required(self):
+        beatmap, library = inputs()
+        for config in ({"min_speed": .5}, {"slow_motion_prompt": "Slow down this shot"},
+                       {"min_speed": .5, "interpolation": "optical_flow"},
+                       {"slow_motion_prompt": "   ", "interpolation": "optical_flow"}):
+            with self.subTest(config=config), self.assertRaisesRegex(ValueError, "prompt|Slow motion"):
+                build_plan(beatmap, library, duration=5, **config)
+        plan = build_plan(beatmap, library, duration=5, **SLOW_REQUEST)
+        self.assertTrue(validate_slow_motion_policy(plan))
+        self.assertEqual(plan["policies"]["min_speed"], .5)
+        self.assertEqual(plan["policies"]["slow_motion_prompt"], SLOW_REQUEST["slow_motion_prompt"])
+
+    def test_actual_curve_and_anchor_fail_closed_even_at_average_one(self):
+        beatmap, library = inputs()
+        for changes in ({"speed_points": [{"at": 0, "speed": 1}, {"at": .5, "speed": .5}, {"at": 1, "speed": 1}]},
+                        {"action_anchor": {"source_time": .1, "output_fraction": .5}}):
+            plan = build_plan(beatmap, library, duration=5)
+            plan["policies"] = {"min_speed": .01}
+            plan["edits"][0].update(changes)
+            with self.assertRaisesRegex(ValueError, "slow motion is forbidden"):
+                validate_plan(plan)
+
+    def test_legacy_actual_slow_is_rejected_even_with_high_source_fps(self):
+        beatmap, library = inputs()
+        plan = build_plan(beatmap, library, duration=5)
+        shot = plan["edits"][0]
+        shot["source_end"] = shot["source_start"] + shot["duration_frames"] / 60
+        plan["assets"][0]["fps"] = 240
+        plan["policies"] = {"min_speed": .01}
+        with self.assertRaisesRegex(ValueError, "slow motion is forbidden"):
+            validate_plan(plan)
+        del shot["kind"]
+        shot["speed_points"] = []
+        with self.assertRaisesRegex(ValueError, "slow motion is forbidden"):
+            validate_slow_motion_policy(plan)
+
+    def test_legacy_fast_plan_with_unused_low_minimum_still_loads(self):
+        beatmap, library = inputs()
+        plan = build_plan(beatmap, library, duration=5)
+        plan["policies"] = {"min_speed": .5}
+        self.assertEqual(validate_plan(plan), plan)
+
+    def test_invalid_policy_never_authorizes_slow_motion(self):
+        beatmap, library = inputs()
+        plan = build_plan(beatmap, library, duration=5)
+        for changes in ({"allow_slow_motion": "true"}, {"allow_slow_motion": True},
+                        {"allow_slow_motion": True, "slow_motion_prompt": "Slow this shot", "interpolation": "none"},
+                        {"interpolation": "blend"}):
+            plan["policies"] = changes
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                validate_plan(plan)
+
+    def test_authorized_plan_reserves_real_frame_at_source_end(self):
+        beatmap, library = inputs((3,))
+        library["assets"][0]["fps"] = 30
+        plan = build_plan(beatmap, library, duration=5, **SLOW_REQUEST)
+        self.assertLessEqual(max(shot["source_end"] for shot in plan["edits"]), 3 - 1 / 30 + 1e-7)
+        self.assertEqual(plan["clips"][0]["end"], 3)
+
+    def test_both_planning_clis_preserve_explicit_prompt_and_safe_default(self):
+        from edit_project import parser, run
+        from project_plan import main
+        beatmap, library = inputs()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            music, media = root / "beats.json", root / "library.json"
+            music.write_text(json.dumps(beatmap), encoding="utf-8")
+            media.write_text(json.dumps(library), encoding="utf-8")
+            for authorized in (False, True):
+                flags = ["--slow-motion-prompt", SLOW_REQUEST["slow_motion_prompt"], "--interpolation", "optical_flow"] if authorized else []
+                for unified in (False, True):
+                    output = root / f"project-{authorized}-{unified}.json"
+                    common = ["--duration", "5", "-o", str(output), *flags]
+                    if unified:
+                        run(parser().parse_args(["plan", "--library", str(media), "--beats", str(music), *common]))
+                    else:
+                        with redirect_stdout(io.StringIO()):
+                            main([str(music), str(media), *common])
+                    plan = json.loads(output.read_text(encoding="utf-8"))
+                    self.assertEqual(plan["policies"]["allow_slow_motion"], authorized)
+                    self.assertEqual(plan["policies"]["min_speed"], .5 if authorized else 1)
 
 
 if __name__ == "__main__":

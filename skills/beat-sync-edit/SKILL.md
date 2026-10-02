@@ -61,14 +61,33 @@ recognition only for audio that belongs in the requested edit; review its output
 The optional speech requirements and model are separate from the base install.
 Text-only revisions preserve cached shots and the soundtrack.
 
+## Playback speed rule
+
+Do not slow video by default. Keep the effective playback speed at least 1x
+throughout every shot, including speed ramps, action anchors and revisions.
+"Cinematic", "smooth", "on the beat", a preset, high-FPS footage or a shortage
+of footage is not permission to slow it down.
+
+Slow motion is allowed only when the user's prompt directly requests it, and
+only with motion-compensated frame interpolation. Record the exact request in
+`--slow-motion-prompt` and select `--interpolation optical_flow`; never invent
+that quote or enable these settings proactively. Plain timestamp stretching,
+lowering playback FPS, duplicated frames and simple frame blending are not
+acceptable substitutes. If interpolation fails, stop that render and explain
+the failure; do not fall back to ordinary slowdown. See
+[project-workflow.md](references/project-workflow.md) for the explicit opt-in.
+
 Duration is exact to one output frame. Source footage is not repeated unless
-allowed. Shortages must be resolved through available ranges, slower/longer
-plans or an explicitly changed constraint. Do not silently truncate the edit.
+allowed. Resolve shortages using additional unused footage, permitted photo
+holds, or an explicitly changed duration/repeat constraint. Do not silently
+slow or truncate the edit to meet its duration. Existing projects receive the
+same checks; an old slow-motion setting is not evidence of a user request.
 
 Automatic beat/energy analysis estimates musical structure; check the drop.
 Automatic tracking uses face/motion cues or a selected subject box; check that
-it follows the intended object. Smooth slow motion blends source frames. These
-features do not replace editorial inspection or synthesize unseen video.
+it follows the intended object. Requested slow motion uses optical-flow frame
+interpolation; inspect moving edges and occlusions for artifacts. These features
+do not replace editorial inspection or create missing scenes.
 
 ## Existing projects and specialized effects
 

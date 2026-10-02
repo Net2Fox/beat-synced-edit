@@ -29,12 +29,12 @@ Example request after installation:
 
 | Capability | Behavior |
 |---|---|
-| Exact duration | Plans a contiguous frame-based timeline and verifies the rendered frame count. Shortages use unused ranges, longer/slower shots, or explicitly allowed repeats. |
+| Exact duration | Plans a contiguous frame-based timeline and verifies the rendered frame count. Shortages use unused ranges, permitted photo holds, or explicitly allowed repeats; never automatic slowdown. |
 | Mixed sources | Imports videos, photos, folders and ZIPs with persistent absolute source paths and unique IDs. Normalizes dimensions, frame rates and orientation during rendering. |
 | Musical structure | Estimates intro, build, drop and outro from energy rises and beats. Accepts explicit section boundaries. |
 | Content-aware selection | Uses Codex-reviewed object tags, shot sizes, action timestamps and quality labels, plus visual fingerprints to favor varied shots. |
 | Subject-aware framing | Tracks an explicitly chosen region, or uses face/motion cues. Smooths the camera path; fixed crops and letterboxing are also available. |
-| Smooth speed ramps | Interpolates a speed curve across each shot and can anchor a source action to a musical beat without changing output duration. |
+| Speed control | Checks the actual speed across ramps and action anchors. Video stays at least 1x by default; slow motion requires a quoted user request and optical-flow frame interpolation. |
 | Style recipes | `cinematic`, `car`, `gaming` and `product` control pace, preferred shots, color, accents and retiming. Settings remain editable. |
 | Preview and revisions | Creates a smaller MP4 and offline HTML review page. Replace a shot, change its length, remove effects, adjust framing/speed, or reorder; unchanged shots use the render cache. |
 | Titles | Timed Unicode text with fonts, outline, translucent background, safe margins, wrapping and fade/slide animations. |
@@ -65,8 +65,13 @@ uses no CDN; its controls export revisions for the CLI or Codex to apply.
 Duration is quantized to the nearest output frame (25 seconds at 30 fps is exactly
 750 frames). Automatic musical sections and tracking need review. Semantic tags
 come from actual visual inspection/annotations, not from brightness heuristics.
-Slow motion uses neighboring-frame blending, not optical-flow or generative
-interpolation. The tool does not invent missing footage or silently repeat it.
+Slow motion is disabled by default, including in presets, shortage handling
+and revisions. Enable it only for a direct user request using
+`--slow-motion-prompt "the user's exact request" --interpolation optical_flow`.
+Requested slowdown synthesizes intermediate motion with optical flow; review
+edges and occlusions for artifacts. Timestamp-only or duplicate-frame slowdown
+and simple frame blending are not permitted. The tool does not invent missing
+scenes or silently repeat footage.
 
 ### Titles and subtitles
 

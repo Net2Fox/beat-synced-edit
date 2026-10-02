@@ -51,7 +51,9 @@ class RevisionTests(unittest.TestCase):
         shots = self.plan["edits"]
         self.assertGreaterEqual(len(shots), 2)
         seconds = (shots[0]["duration_frames"] + 1) / 30
-        revised = apply_revisions(self.plan, [{"op": "duration", "shot": 1, "seconds": seconds}])
+        revised = apply_revisions(self.plan, [{"op": "slow_motion_policy", "prompt": "Lengthen this shot using interpolated slow motion.",
+                                              "interpolation": "optical_flow"},
+                                             {"op": "duration", "shot": 1, "seconds": seconds}])
         self.assertEqual(revised["edits"][0]["duration_frames"], shots[0]["duration_frames"] + 1)
         self.assertEqual(revised["edits"][1]["duration_frames"], shots[1]["duration_frames"] - 1)
         self.assertEqual(revised["edits"][-1]["timeline_end_frame"], self.plan["duration_frames"])
@@ -105,6 +107,51 @@ class RevisionTests(unittest.TestCase):
         snapshots = list((self.root / ".history").glob("*.json"))
         self.assertEqual(len(snapshots), 1)
         self.assertEqual(read_json(snapshots[0]), self.plan)
+
+    def test_duration_or_speed_revision_cannot_create_implicit_slow_motion(self):
+        path = self.root / "project.json"
+        write_json(path, self.plan)
+        before = path.read_bytes()
+        operations = [{"op": "duration", "shot": 1, "seconds": (self.plan["edits"][0]["duration_frames"] + 1) / 30},
+                      {"op": "speed", "shot": 1, "points": [{"at": 0, "speed": 1}, {"at": .5, "speed": .5}, {"at": 1, "speed": 1}]}]
+        for operation in operations:
+            with self.assertRaisesRegex(ValueError, "slow motion is forbidden"):
+                revise_file(path, [operation])
+            self.assertEqual(path.read_bytes(), before)
+        self.assertFalse((self.root / ".history").exists())
+
+    def test_short_replacement_requires_explicit_interpolated_slow_motion(self):
+        used = {s["asset_id"] for s in self.plan["edits"]}
+        clip = next(c for c in self.plan["clips"] if c["asset_id"] not in used)
+        clip["end"] = self.plan["edits"][0]["duration_frames"] / 30 * .75
+        self.plan["policies"]["min_speed"] = .5  # An old numeric floor grants no consent.
+        replace = {"op": "replace", "shot": 1, "clip_id": clip["id"]}
+        with self.assertRaisesRegex(ValueError, "long enough"):
+            apply_revisions(self.plan, [replace])
+        revised = apply_revisions(self.plan, [{"op": "slow_motion_policy", "prompt": "Slow the replacement with interpolation.",
+                                              "interpolation": "optical_flow"}, replace])
+        self.assertAlmostEqual(revised["edits"][0]["average_speed"], .75)
+
+    def test_explicit_policy_upgrade_can_open_a_legacy_slow_project(self):
+        original = self.plan["edits"][0]
+        original["source_end"] = original["source_start"] + original["duration_frames"] / 30 * .75
+        self.plan["policies"] = {"min_speed": .5, "max_speed": 4}
+        before = copy.deepcopy(self.plan)
+        with self.assertRaisesRegex(ValueError, "slow motion is forbidden"):
+            apply_revisions(self.plan, [{"op": "effects", "all": True, "values": {"flash": 0}}])
+        revised = apply_revisions(self.plan, [{"op": "slow_motion_policy", "prompt": "Keep this slow motion with interpolation.",
+                                              "interpolation": "optical_flow"}])
+        self.assertTrue(revised["policies"]["allow_slow_motion"])
+        self.assertEqual(self.plan, before)
+        with self.assertRaisesRegex(ValueError, "slow motion is forbidden"):
+            apply_revisions(revised, [{"op": "slow_motion_policy", "prompt": "", "interpolation": "none"}])
+
+    def test_policy_can_be_revoked_on_normal_speed_project(self):
+        enabled = apply_revisions(self.plan, [{"op": "slow_motion_policy", "prompt": "Allow slow motion with interpolation.",
+                                              "interpolation": "optical_flow"}])
+        disabled = apply_revisions(enabled, [{"op": "slow_motion_policy", "prompt": "", "interpolation": "none", "min_speed": 1}])
+        self.assertFalse(disabled["policies"]["allow_slow_motion"])
+        self.assertEqual(disabled["policies"]["min_speed"], 1)
 
     def test_preview_html_escapes_untrusted_names_and_works_offline(self):
         self.plan["clips"][0]["tags"] = ["</script><script>alert(1)</script>"]

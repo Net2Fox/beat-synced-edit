@@ -57,7 +57,9 @@ def parser():
     plan.add_argument("--audio-start", type=float)
     plan.add_argument("--allow-repeats", action="store_true")
     plan.add_argument("--shortage", choices=["extend", "error", "repeat"], default="extend")
-    plan.add_argument("--min-speed", type=float, default=.5)
+    plan.add_argument("--min-speed", type=float)
+    plan.add_argument("--slow-motion-prompt", default="", help="Exact user request explicitly authorizing interpolated slow motion")
+    plan.add_argument("--interpolation", choices=("none", "optical_flow"), default="none")
     plan.add_argument("--max-speed", type=float, default=3)
     plan.add_argument("--tags", nargs="*", help="Prefer these reviewed subject tags")
     plan.add_argument("--exclude", nargs="*", help="Exclude these clip IDs")
@@ -129,7 +131,7 @@ def run(args):
         library, beatmap = read_json(args.library), read_json(args.beats)
         width, height = args.size
         overrides = {key: getattr(args, key) for key in
-                     ("min_speed", "max_speed", "tags", "exclude", "beat_stride", "min_shot", "max_shot", "grade", "reframe", "subject")
+                     ("min_speed", "max_speed", "tags", "exclude", "beat_stride", "min_shot", "max_shot", "grade", "reframe", "subject", "slow_motion_prompt", "interpolation")
                      if getattr(args, key) is not None}
         if args.section_stride:
             overrides["section_stride"] = dict(args.section_stride)

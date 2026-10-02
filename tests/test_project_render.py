@@ -7,16 +7,43 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import cv2
 import numpy as np
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from project_render import _display_size, _effect_frame, _read_image, probe, render_project, source_times
+from project_render import (_OpticalFlowPair, _VideoReader, _display_size, _effect_frame,
+                            _read_image, probe, render_project, source_times)
 
 
 class RetimingTests(unittest.TestCase):
+    def test_optical_flow_creates_a_moving_intermediate_not_a_crossfade(self):
+        first = np.zeros((128, 192, 3), np.uint8)
+        texture = np.random.default_rng(2).integers(40, 255, (40, 40, 3), dtype=np.uint8)
+        first[44:84, 40:80] = texture
+        second = np.zeros_like(first)
+        second[44:84, 56:96] = texture
+        expected = np.zeros_like(first)
+        expected[44:84, 48:88] = texture
+        pair = _OpticalFlowPair(first, second)
+        actual = pair.frame(.5)
+        crossfade = cv2.addWeighted(first, .5, second, .5, 0)
+        error = np.abs(actual.astype(float)-expected).mean()
+        self.assertLess(error, .5)
+        self.assertLess(error, np.abs(crossfade.astype(float)-expected).mean()/5)
+        xs = np.where(actual.mean(axis=2) > 80)[1]
+        self.assertEqual((xs.min(), xs.max()), (48, 87))
+        self.assertTrue(np.array_equal(pair.frame(0), first))
+        self.assertTrue(np.array_equal(pair.frame(1), second))
+
+    def test_optical_flow_failure_never_returns_a_blended_frame(self):
+        frame = np.zeros((32, 32, 3), np.uint8)
+        with patch("project_render.cv2.calcOpticalFlowFarneback", return_value=None):
+            with self.assertRaisesRegex(RuntimeError, "invalid motion field"):
+                _OpticalFlowPair(frame, frame)
+
     def test_ramp_is_monotone_smooth_and_action_hits_exact_time(self):
         edit = {"source_start": 2, "source_end": 7,
                 "speed_points": [{"at": 0, "speed": 2}, {"at": .5, "speed": .3}, {"at": 1, "speed": 2}],
@@ -90,7 +117,83 @@ class RenderIntegrationTests(unittest.TestCase):
                           "speed_points": [{"at": 0, "speed": 1.8}, {"at": .5, "speed": .5}, {"at": 1, "speed": 1.8}]})
             cursor += frames
         return {"schema_version": 2, "audio": {"path": str(self.music), "start": .2},
-                "output": {"width": 160, "height": 284, "fps": 30}, "duration_frames": cursor, "edits": edits}
+                "output": {"width": 160, "height": 284, "fps": 30}, "duration_frames": cursor, "edits": edits,
+                "policies": {"allow_slow_motion": True, "slow_motion_prompt": "Slow the action with optical-flow interpolation.",
+                             "interpolation": "optical_flow"}}
+
+    def slow_plan(self):
+        plan = self.make_plan()
+        edit = copy.deepcopy(plan["edits"][0])
+        edit.update(source_end=.5, duration_frames=30, timeline_end_frame=30, effects={}, speed_points=[])
+        plan.update(edits=[edit], duration_frames=30)
+        return plan
+
+    def test_slow_render_rejects_missing_or_incomplete_authorization_before_writing(self):
+        for policies in ({}, {"allow_slow_motion": True, "interpolation": "optical_flow"},
+                         {"allow_slow_motion": True, "slow_motion_prompt": "Slow this shot."}):
+            with self.subTest(policies=policies):
+                plan = self.slow_plan()
+                plan["policies"] = policies
+                # The standalone renderer treats omitted kind as video.
+                plan["edits"][0].pop("kind")
+                destination = self.work/"must-not-create"/"slow.mp4"
+                with self.assertRaisesRegex(ValueError, "slow|Slow|interpolation"):
+                    render_project(plan, destination)
+                self.assertFalse(destination.parent.exists())
+
+    def test_opted_in_slow_render_motion_frames_audio_and_pair_cache(self):
+        moving = self.work/"flow-motion.mp4"
+        texture = np.random.default_rng(2).integers(40, 255, (40, 40, 3), dtype=np.uint8)
+        writer = cv2.VideoWriter(str(moving), cv2.VideoWriter_fourcc(*"mp4v"), 10, (192, 128))
+        for i in range(12):
+            frame = np.zeros((128, 192, 3), np.uint8)
+            frame[44:84, 40+8*i:80+8*i] = texture
+            writer.write(frame)
+        writer.release()
+        stream = next(s for s in probe(moving)["streams"] if s["codec_type"] == "video")
+        reader = _VideoReader(moving, 0, .5, stream, interpolation="optical_flow")
+        try:
+            with patch("project_render.cv2.calcOpticalFlowFarneback", wraps=cv2.calcOpticalFlowFarneback) as flow:
+                reader.frame(.025)
+                reader.frame(.05)
+                self.assertEqual(flow.call_count, 2)  # Forward/backward fields reused for the pair.
+        finally:
+            reader.close()
+        plan = self.slow_plan()
+        plan["edits"][0]["source"] = str(moving)
+        plan["output"].update(width=192, height=128)
+        result = render_project(plan, self.work/"interpolated.mp4", cache_dir=self.work/"cache-flow")
+        self.assertEqual((result["frames"], result["duration"], result["audio_sample_rate"]), (30, 1, 48000))
+        cap = cv2.VideoCapture(str(self.work/"interpolated.mp4"))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 3)  # Halfway between source frames 0 and 1.
+        ok, actual = cap.read()
+        cap.release()
+        self.assertTrue(ok)
+        xs = np.where(actual.mean(axis=2) > 80)[1]
+        self.assertLess(abs(xs.mean()-63.5), 1)
+        self.assertLessEqual(xs.max()-xs.min(), 40)  # Crossfade would keep a wider double image.
+        reused = render_project(plan, self.work/"interpolated-reused.mp4", cache_dir=self.work/"cache-flow")
+        self.assertEqual(reused["cache_hits"], 1)
+
+    def test_failed_interpolation_preserves_output_without_fallback(self):
+        destination = self.work/"flow-failure.mp4"
+        destination.write_bytes(b"existing output")
+        with patch("project_render._OpticalFlowPair", side_effect=RuntimeError("Optical-flow interpolation failed")):
+            with self.assertRaisesRegex(RuntimeError, "interpolation failed"):
+                render_project(self.slow_plan(), destination, cache_dir=self.work/"cache-flow-failure")
+        self.assertEqual(destination.read_bytes(), b"existing output")
+        self.assertFalse(list((self.work/"cache-flow-failure").glob("*.mp4")))
+
+    def test_optical_flow_tail_requires_a_real_following_frame(self):
+        stream = next(s for s in probe(self.a)["streams"] if s["codec_type"] == "video")
+        reader = _VideoReader(self.a, 0, 2, stream, interpolation="optical_flow")
+        try:
+            final = reader.frame(47/24)  # Exact final native frame requires no interpolation.
+            self.assertEqual(final.shape, (180, 320, 3))
+            with self.assertRaisesRegex(RuntimeError, "following source frame"):
+                reader.frame(47/24+.005)
+        finally:
+            reader.close()
 
     def test_mixed_media_exact_frames_audio_and_revision_cache(self):
         plan = self.make_plan()

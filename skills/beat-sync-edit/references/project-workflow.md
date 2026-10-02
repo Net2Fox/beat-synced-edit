@@ -73,7 +73,8 @@ sections. `--beat-stride N` changes every section. `--min-shot`/`--max-shot`
 bound nominal shot lengths (a final section boundary or source shortage may
 require a shorter remainder). `--grade none` preserves natural color;
 `--tags car drift` prefers those reviewed labels; `--exclude CLIP_ID ...`
-omits named clips. Speed limits use `--min-speed`/`--max-speed`.
+omits named clips. Speed limits use `--min-speed`/`--max-speed`; the default
+minimum is 1x. Presets cannot authorize slow motion.
 
 The plan contains frame-based timing, intro/build/drop/outro sections, selected
 source ranges and per-shot effects. Music structure is estimated from beats and
@@ -94,11 +95,13 @@ records in output seconds (or `start_frame`, `end_frame`). Names are `intro`,
 
 Duration is rounded to the nearest output frame, and the renderer verifies the
 frame count. A 25-second request at 30 fps yields 750 frames. Shortage policy:
-`--shortage extend` may use unused source ranges and slower playback;
+`--shortage extend` uses available ranges while respecting the speed policy;
 `--shortage error` fails when natural-speed material is insufficient;
 `--shortage repeat --allow-repeats` explicitly permits reused footage. Preserve
 the user's constraints: if material is still insufficient, request more footage
 or a change to duration/repeat policy rather than silently ignoring them.
+Never lower the speed limit to fill missing duration unless the user's prompt
+explicitly asks for slow motion and interpolation has been enabled.
 
 ## Preview and revise
 
@@ -125,7 +128,9 @@ Translate conversational revisions into JSON operations. Shot numbers start at
 
 Replacement preserves output duration. A duration revision borrows frames from
 another shot, preserving the total; by default it uses the next shot (previous
-for the final shot). It changes effective playback speed, so review the result.
+for the final shot). It changes effective playback speed. A revision that would
+slow any video below 1x is rejected unless explicit slow motion is enabled;
+choose a longer unused source range or another shot instead.
 Timing/reordering revisions also update the section spans; the original musical
 sections remain in `original_sections`. Check the revised cuts against the beat
 map, since an explicitly changed duration may move a cut off a beat.
@@ -153,7 +158,7 @@ by the user, use `auto` with its initial bounding box.
 [
   {"op": "reframe", "shot": 3, "mode": "auto", "subject": [0.35, 0.25, 0.3, 0.5]},
   {"op": "speed", "shot": 3,
-   "points": [{"at": 0, "speed": 2}, {"at": 0.5, "speed": 0.8}, {"at": 1, "speed": 2}],
+   "points": [{"at": 0, "speed": 1}, {"at": 0.5, "speed": 1}, {"at": 1, "speed": 1}],
    "anchor": {"source_time": 3.2, "output_fraction": 0.5}}
 ]
 ```
@@ -162,11 +167,54 @@ Speed points are **relative weights** along normalized output time, smoothly
 interpolated and normalized to consume the selected source range. The source
 span divided by output duration is the average speed. An action anchor fixes
 the named source moment to an exact output fraction; choose that fraction from
-the desired beat. Slow motion blends source frames; it is not generative or
-optical-flow motion reconstruction. Preserve frame/time units when revising.
+the desired beat. Even weights at or above 1 can produce a local speed below
+1x after normalization or anchoring. Both planning and rendering check the
+effective speed; nominal point values and output FPS alone are insufficient.
+Preserve frame/time units when revising.
 The planner's speed limits also apply to revisions, including the anchored
 curve. If a curve exceeds them, choose gentler weights or an appropriate source
-span; change the limits only when that matches the user's intended effect.
+span. Slow motion requires the explicit opt-in below.
+
+### Explicitly requested slow motion
+
+Only use this when the user's prompt directly requests slowing the footage.
+Copy the actual request into `--slow-motion-prompt`; do not treat "cinematic",
+"smooth", beat synchronization, a preset or a high source FPS as permission.
+For example, if the user actually said "Slow the impact down to half speed
+with frame interpolation":
+
+```powershell
+& $editPython -X utf8 "$editScripts/edit_project.py" plan --library "$work/library/library.json" --beats "$work/beats.json" --duration 25 --slow-motion-prompt 'Slow the impact down to half speed with frame interpolation' --interpolation optical_flow --min-speed 0.5 -o "$work/project.json"
+```
+
+The project records `policies.allow_slow_motion`, the exact quote in
+`policies.slow_motion_prompt`, and `policies.interpolation = optical_flow`.
+The quote records authorization; it does not parse which shot or speed was
+requested. Apply source ranges and speed curves only to the requested moments
+and inspect the resulting speed bounds. The default minimum becomes .5x when
+opted in; set it explicitly to match the request.
+
+For a saved project, an explicit revision can enable the same policy:
+
+```json
+[
+  {"op": "slow_motion_policy", "prompt": "Slow the impact down to half speed with frame interpolation", "interpolation": "optical_flow", "min_speed": 0.5}
+]
+```
+
+Supply this only after a matching user request. Older projects with slowdown
+and no recorded request are rejected; do not automatically opt them in to
+make validation pass. Disable slow motion with an empty prompt, interpolation
+`none` and minimum 1 after correcting any remaining slow shots.
+
+The renderer synthesizes intermediate motion using optical flow. Plain
+timestamp stretching, lower playback FPS, duplicate-frame slow motion and
+simple crossfades are forbidden. An interpolation error fails the render;
+there is no ordinary-slowdown fallback. Check moving edges, motion blur and
+occlusions in the actual output because optical flow can produce artifacts.
+Interpolation needs a following native frame. The planner reserves a frame at
+the end of known video assets; if a manually edited range lacks that frame,
+trim its end or choose a longer source instead of freezing the final frame.
 
 ## Final render
 

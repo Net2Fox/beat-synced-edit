@@ -83,6 +83,7 @@ def main():
     project = work / "project.json"
     cli("plan", "--library", library_file, "--beats", work / "beats.json", "--duration", "6",
         "--preset", "product", "--size", "360x640", "--fps", "30", "--audio-start", "0",
+        "--slow-motion-prompt", "Slow the generated test footage with optical-flow interpolation", "--interpolation", "optical_flow",
         "--sections", section_file, "--section-stride", "drop=1", "--min-shot", ".25", "-o", project)
     plan = json.loads(project.read_text(encoding="utf-8"))
     assert plan["duration_frames"] == 180

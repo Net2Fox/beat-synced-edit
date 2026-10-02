@@ -87,7 +87,9 @@ class TextRevisionTests(unittest.TestCase):
                 {"id": "sub-002", "text": "Overlap", "start_frame": 45, "end_frame": 75}]}])
 
     def test_retiming_picture_does_not_shift_output_timed_subtitles(self):
-        plan = apply_revisions(self.plan, [{"op": "subtitles_replace", "cues": [self.caption()]}])
+        plan = apply_revisions(self.plan, [
+            {"op": "slow_motion_policy", "prompt": "Slow this test shot with optical-flow interpolation", "interpolation": "optical_flow", "min_speed": .5},
+            {"op": "subtitles_replace", "cues": [self.caption()]}])
         seconds = (plan["edits"][0]["duration_frames"] + 1) / 30
         revised = apply_revisions(plan, [{"op": "duration", "shot": 1, "seconds": seconds}])
         self.assertEqual(revised["subtitles"], plan["subtitles"])

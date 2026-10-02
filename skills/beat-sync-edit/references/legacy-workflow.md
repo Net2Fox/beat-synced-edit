@@ -1,6 +1,10 @@
 # Legacy pipeline and custom effects
 
 Use the skill root/interpreter and work/output paths established in SKILL.md.
+The playback-speed rule in SKILL.md applies to every legacy/custom FFmpeg
+workflow too. Do not slow footage by default. For explicitly requested slow
+motion, use the project workflow with the recorded prompt and optical-flow
+interpolation. Legacy commands or hand-written filters must not bypass it.
 The legacy planner can finish early; prefer the project workflow for exact duration.
 
 ## The pipeline (run in order)
@@ -98,7 +102,7 @@ effects to beat timestamps from the beatmap.
 | horizontal stretch hit | `scale=iw*1.25:ih,crop=iw/1.25:ih,setsar=1` |
 | hue shift / psychedelic | static: `hue=h=60` · animated: `hue=h='mod(t*180,360)'` |
 | RGB split / glitch | `rgbashift=rh=6:bh=-6` |
-| speed ramp | `setpts=0.5*PTS` (2x) · `setpts=2*PTS` (half speed; add `minterpolate` for smoothness) |
+| acceleration | `setpts=0.5*PTS` (2x); any requested slow-motion portion must use the project workflow's explicit opt-in and optical-flow interpolation |
 | shake | `crop=iw-20:ih-20:'10+8*sin(t*40)':'10+8*cos(t*37)'` |
 | strobe invert | `negate=enable='lt(mod(t,0.25),0.04)'` |
 | dreamy glow | `gblur=sigma=8,blend=all_mode=screen,all_opacity=0.35` (via split) |

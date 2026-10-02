@@ -111,7 +111,10 @@ def _replacement_span(plan, shot, clip):
     if enough:
         start, _ = enough[0]
         return start, start + required
-    minimum = required * plan.get("policies", {}).get("min_speed", .5)
+    from project_plan import _slow_motion_authorized
+    policies = plan.get("policies", {})
+    minimum_rate = policies.get("min_speed", .5) if _slow_motion_authorized(policies) else max(1, policies.get("min_speed", 1))
+    minimum = required * minimum_rate
     if intervals:
         start, end = max(intervals, key=lambda span: span[1] - span[0])
         if end - start >= minimum - 1e-7:
@@ -125,13 +128,30 @@ def apply_revisions(plan, operations):
     Supported operations: replace, effects, reframe, speed, duration, reorder.
     A duration edit borrows frames from the following shot, or an explicit donor.
     """
-    from project_plan import validate_plan
+    from project_plan import validate_plan, _slow_motion_authorized
     from text_project import TEXT_OPERATIONS, apply_text_operation
 
-    validate_plan(plan)
     if not isinstance(operations, list) or not operations:
         raise ValueError("revisions must be a non-empty list of operations")
+    if any(not isinstance(operation, dict) for operation in operations):
+        raise ValueError("Each revision must be an object")
     result = copy.deepcopy(plan)
+    policy_changes = [operation for operation in operations if operation.get("op") == "slow_motion_policy"]
+    if len(policy_changes) > 1:
+        raise ValueError("Only one slow_motion_policy change is allowed per revision")
+    if policy_changes:
+        operation = policy_changes[0]
+        prompt = operation.get("prompt", "")
+        policy = result.setdefault("policies", {})
+        policy.update(allow_slow_motion=bool(prompt), slow_motion_prompt=prompt,
+                      interpolation=operation.get("interpolation", "none"))
+        enabled = _slow_motion_authorized(policy)
+        policy["min_speed"] = _number(operation.get("min_speed", .5 if enabled else 1), "min_speed", .001)
+        if not enabled and policy["min_speed"] < 1:
+            raise ValueError("min_speed below 1 requires an explicit user prompt and optical_flow interpolation")
+    # An explicitly requested policy upgrade can make an old slow project valid.
+    # No media edit implicitly grants this permission or fabricates prompt text.
+    validate_plan(result)
     edits = result["edits"]
     fps = result["output"]["fps"]
     catalog = {str(c["id"]): c for c in result.get("clips", [])}
@@ -139,7 +159,9 @@ def apply_revisions(plan, operations):
         if not isinstance(operation, dict):
             raise ValueError("Each revision must be an object")
         kind = operation.get("op")
-        if kind in TEXT_OPERATIONS:
+        if kind == "slow_motion_policy":
+            continue
+        elif kind in TEXT_OPERATIONS:
             apply_text_operation(result, operation)
         elif kind == "reorder":
             order = operation.get("order", [])

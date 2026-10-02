@@ -2,8 +2,8 @@
 """Frame-exact project renderer with smooth retiming and reusable shot caches.
 
 The project is a JSON version-2 plan. FFmpeg handles oriented, square-pixel
-decoding and H.264/AAC encoding; NumPy/OpenCV handle interpolated retiming,
-tracking crops and effects. Slow motion uses frame blending, not optical flow.
+decoding and H.264/AAC encoding; NumPy/OpenCV handle retiming, tracking crops
+and effects. Explicitly authorized slow motion uses optical-flow interpolation.
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ import numpy as np
 
 from text_overlay import TextCompositor, validate_text_tracks
 
-RENDER_VERSION = 1
+RENDER_VERSION = 2
 
 
 def _run(args):
@@ -147,10 +147,74 @@ def _display_size(stream):
     return max(2, w), max(2, h)
 
 
+class _OpticalFlowPair:
+    """Bidirectional motion interpolation, with one flow estimate per frame pair.
+
+    Estimate motion at a bounded resolution, then warp the original-resolution
+    frames. Both endpoints are brought to the intermediate time before blending;
+    this is motion interpolation rather than a crossfade of stationary frames.
+    """
+
+    def __init__(self, first, second, max_dimension=640):
+        if first.shape != second.shape or first.ndim != 3:
+            raise ValueError("Optical-flow endpoints must have matching image dimensions")
+        self.first, self.second = first, second
+        height, width = first.shape[:2]
+        factor = min(1, max_dimension / max(height, width))
+        size = (max(2, round(width * factor)), max(2, round(height * factor)))
+        gray = [cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) for frame in (first, second)]
+        if size != (width, height):
+            gray = [cv2.resize(frame, size, interpolation=cv2.INTER_AREA) for frame in gray]
+        try:
+            fields = [cv2.calcOpticalFlowFarneback(a, b, None, .5, 5, 25, 5, 7, 1.5, 0)
+                      for a, b in ((gray[0], gray[1]), (gray[1], gray[0]))]
+        except cv2.error as exc:
+            raise RuntimeError(f"Optical-flow interpolation failed: {exc}") from exc
+        self.flows = []
+        for flow in fields:
+            if flow is None or flow.shape != (*gray[0].shape, 2) or not np.isfinite(flow).all():
+                raise RuntimeError("Optical-flow interpolation returned an invalid motion field")
+            if size != (width, height):
+                flow = cv2.resize(flow, (width, height), interpolation=cv2.INTER_LINEAR)
+                flow[..., 0] *= width / size[0]
+                flow[..., 1] *= height / size[1]
+            self.flows.append(flow)
+        self.grid_x, self.grid_y = np.meshgrid(np.arange(width, dtype=np.float32),
+                                              np.arange(height, dtype=np.float32))
+
+    def _warp(self, frame, flow, fraction):
+        # Invert the forward displacement with fixed-point refinement. Sampling
+        # flow at the unwarped target alone leaves moving object edges behind.
+        map_x, map_y = self.grid_x - fraction*flow[..., 0], self.grid_y - fraction*flow[..., 1]
+        for _ in range(3):
+            sampled = cv2.remap(flow, map_x, map_y, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+            map_x = self.grid_x - fraction*sampled[..., 0]
+            map_y = self.grid_y - fraction*sampled[..., 1]
+        return cv2.remap(frame, map_x, map_y, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+
+    def frame(self, fraction):
+        if not math.isfinite(fraction) or not 0 <= fraction <= 1:
+            raise ValueError("Interpolation fraction must be between zero and one")
+        if fraction == 0:
+            return self.first.copy()
+        if fraction == 1:
+            return self.second.copy()
+        try:
+            earlier = self._warp(self.first, self.flows[0], fraction)
+            later = self._warp(self.second, self.flows[1], 1-fraction)
+            return cv2.addWeighted(earlier, 1-fraction, later, fraction, 0)
+        except cv2.error as exc:
+            raise RuntimeError(f"Optical-flow interpolation failed: {exc}") from exc
+
+
 class _VideoReader:
     """Sequential fixed-rate FFmpeg decoder; keeps only two source frames in RAM."""
 
-    def __init__(self, path, start, end, stream):
+    def __init__(self, path, start, end, stream, interpolation="none"):
+        if interpolation not in ("none", "optical_flow"):
+            raise ValueError("Interpolation must be none or optical_flow")
+        self.interpolation = interpolation
+        self.flow_pair = None
         self.w, self.h = _display_size(stream)
         self.fps = min(120.0, max(1.0, _ratio(stream.get("avg_frame_rate"), 30)))
         self.start = start
@@ -182,9 +246,19 @@ class _VideoReader:
         while self.index < wanted and self.second is not None:
             self.first, self.second = self.second, self._read()
             self.index += 1
+            self.flow_pair = None
+        fraction = position - self.index
         if self.second is None:
+            if self.interpolation == "optical_flow" and fraction > 1e-7:
+                raise RuntimeError("Optical-flow interpolation needs a following source frame; "
+                                   "trim source_end before the final native frame")
             return self.first.copy()
-        fraction = position - wanted
+        if self.interpolation == "optical_flow":
+            if fraction < 1e-7:
+                return self.first.copy()
+            if self.flow_pair is None:
+                self.flow_pair = _OpticalFlowPair(self.first, self.second)
+            return self.flow_pair.frame(fraction)
         return cv2.addWeighted(self.first, 1-fraction, self.second, fraction, 0)
 
     def close(self):
@@ -267,7 +341,7 @@ def _center(track, source_time, reframe):
     return .5, .5
 
 
-def _render_shot(edit, output, width, height, fps, preview, media):
+def _render_shot(edit, output, width, height, fps, preview, media, interpolation="none"):
     from smart_reframe import crop_frame, track_subject
     count = int(edit["duration_frames"])
     source = Path(edit["source"])
@@ -292,7 +366,7 @@ def _render_shot(edit, output, width, height, fps, preview, media):
             if not math.isfinite(subject_start) or not 0 <= subject_start <= start:
                 raise ValueError("reframe.subject_start must be between zero and source_start")
             track = track_subject(str(source), subject_start, end, subject=reframe.get("subject"), sample_fps=5)
-        reader = _VideoReader(source, start, end, stream)
+        reader = _VideoReader(source, start, end, stream, interpolation=interpolation)
     effects = edit.get("effects", {})
     zoom = _positive_float(effects.get("zoom", 1), "zoom")
     if zoom < 1:
@@ -387,6 +461,10 @@ def _validate_plan(plan):
                 raise ValueError("Subject box must fit inside the normalized frame")
     if cursor != _integer(plan["duration_frames"], "duration_frames"):
         raise ValueError("Edit durations do not sum to the requested duration_frames")
+    # This entry point also accepts minimal hand-authored plans. Never rely on
+    # the planner/CLI having checked authorization or hidden ramp/anchor slows.
+    from project_plan import validate_slow_motion_policy
+    validate_slow_motion_policy(plan)
     validate_text_tracks(plan)
     return width, height, fps, cursor
 
@@ -483,12 +561,16 @@ def render_project(plan, output_path, preview=False, cache_dir=None):
     cache.mkdir(parents=True, exist_ok=True)
     shots, hashes, media_by_path = [], {}, {}
     cache_hits = 0
+    from project_plan import speed_bounds
     for edit in plan["edits"]:
         path = str(Path(edit["source"]).resolve())
         if path not in hashes:
             hashes[path] = _file_digest(path)
             media_by_path[path] = probe(path) if edit.get("kind", "video") == "video" else {}
+        interpolation = ("optical_flow" if edit.get("kind", "video") == "video"
+                         and speed_bounds(edit, edit["duration_frames"]/fps)[0] < 1-1e-5 else "none")
         signature = {k: edit.get(k) for k in ("kind", "source_start", "source_end", "duration_frames", "effects", "speed_points", "reframe", "action_anchor")}
+        signature["interpolation"] = interpolation
         signature.update(renderer=RENDER_VERSION, source_sha256=hashes[path], width=width, height=height, fps=fps, preview=bool(preview))
         key = hashlib.sha256(json.dumps(_canonical_cache_value(signature), sort_keys=True,
                                         separators=(",", ":"), allow_nan=False).encode()).hexdigest()
@@ -508,7 +590,7 @@ def render_project(plan, output_path, preview=False, cache_dir=None):
         else:
             temporary = cache/f"{key}.{uuid.uuid4().hex}.tmp.mp4"
             try:
-                _render_shot(edit, temporary, width, height, fps, preview, media_by_path[path])
+                _render_shot(edit, temporary, width, height, fps, preview, media_by_path[path], interpolation=interpolation)
                 os.replace(temporary, shot)
             finally:
                 temporary.unlink(missing_ok=True)
