@@ -8,6 +8,7 @@ and effects. Explicitly authorized slow motion uses optical-flow interpolation.
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
 import hashlib
 import json
 import math
@@ -23,7 +24,7 @@ import numpy as np
 
 from text_overlay import TextCompositor, validate_text_tracks
 
-RENDER_VERSION = 2
+RENDER_VERSION = 3
 
 
 def _run(args):
@@ -63,76 +64,9 @@ def _ratio(value, default=1.0):
         return default
 
 
-def _integrated_speed(points, positions):
-    """Integrate a positive curve with zero slope at every control point."""
-    if not points:
-        points = [{"at": 0, "speed": 1}, {"at": 1, "speed": 1}]
-    points = sorted((float(p["at"]), _positive_float(p["speed"], "speed")) for p in points)
-    if any(not math.isfinite(p[0]) or not 0 <= p[0] <= 1 for p in points):
-        raise ValueError("Speed point positions must be between 0 and 1")
-    if any(a[0] == b[0] for a, b in zip(points, points[1:])):
-        raise ValueError("Speed point positions must be unique")
-    if points[0][0] > 0:
-        points.insert(0, (0, points[0][1]))
-    if points[-1][0] < 1:
-        points.append((1, points[-1][1]))
-    values = np.zeros_like(positions, dtype=np.float64)
-    total = 0.0
-    for (a, sa), (b, sb) in zip(points, points[1:]):
-        width = b - a
-        x = np.clip(positions - a, 0, width)
-        values += sa * x + (sb - sa) * (x / 2 - width * np.sin(np.pi * x / width) / (2 * np.pi))
-        total += width * (sa + sb) / 2
-    if total <= 0:
-        raise ValueError("Speed curve must span a positive interval")
-    return values / total
-
-
-def _anchor_warp(progress, at, target):
-    """Monotone C1 interpolation of (0,0), (at,target), (1,1)."""
-    left = target / at
-    right = (1 - target) / (1 - at)
-    middle = 2 * left * right / (left + right)
-    result = np.empty_like(progress)
-    for mask, x0, x1, y0, y1, m0, m1 in (
-        (progress <= at, 0, at, 0, target, left, middle),
-        (progress > at, at, 1, target, 1, middle, right),
-    ):
-        t = (progress[mask] - x0) / (x1 - x0)
-        result[mask] = ((2*t**3 - 3*t**2 + 1)*y0 + (t**3 - 2*t**2 + t)*(x1-x0)*m0
-                        + (-2*t**3 + 3*t**2)*y1 + (t**3-t**2)*(x1-x0)*m1)
-    return result
-
-
-def source_times(edit, positions):
-    """Map normalized output times to absolute source seconds, including an anchor.
-
-    Speed points are relative speed weights; the integral is scaled to exactly
-    consume the selected source span. Anchoring smoothly redistributes that span
-    and guarantees the action's source_time at its output_fraction.
-    """
-    positions = np.asarray(positions, dtype=np.float64)
-    if np.any(~np.isfinite(positions)) or np.any((positions < 0) | (positions > 1)):
-        raise ValueError("Output positions must be between 0 and 1")
-    start, end = float(edit.get("source_start", 0)), float(edit.get("source_end", 0))
-    if not math.isfinite(start) or not math.isfinite(end) or start < 0 or end <= start:
-        raise ValueError("Video source_start/source_end must form a positive finite span")
-    points = edit.get("speed_points")
-    progress = _integrated_speed(points, positions)
-    anchor = edit.get("action_anchor")
-    if anchor:
-        fraction = float(anchor["output_fraction"])
-        target = (float(anchor["source_time"]) - start) / (end - start)
-        if not math.isfinite(fraction) or not math.isfinite(target):
-            raise ValueError("Action anchor must be finite")
-        if fraction in (0, 1) and abs(target - fraction) < 1e-8:
-            pass
-        elif 0 < fraction < 1 and 0 < target < 1:
-            at = float(_integrated_speed(points, np.array([fraction]))[0])
-            progress = _anchor_warp(progress, at, target)
-        else:
-            raise ValueError("An interior action anchor must lie inside the selected source span")
-    return start + (end - start) * progress
+# Public reexports preserve the original renderer API while every subsystem
+# uses the same time mapping implementation.
+from timeline_map import _integrated_speed, _anchor_warp, source_times
 
 
 def _display_size(stream):
@@ -342,30 +276,24 @@ def _center(track, source_time, reframe):
 
 
 def _render_shot(edit, output, width, height, fps, preview, media, interpolation="none"):
-    from smart_reframe import crop_frame, track_subject
+    from smart_reframe import crop_frame
+    from tracking_review import resolve_track, tracking_report
     count = int(edit["duration_frames"])
     source = Path(edit["source"])
     reframe = edit.get("reframe", {})
     kind = edit.get("kind", "video")
     start, end = float(edit.get("source_start", 0)), float(edit.get("source_end", 0))
     reader = None
-    track = []
+    track = resolve_track(edit)
     if kind == "image":
         image = _read_image(source)
         times = np.zeros(count)
-        if reframe.get("mode", "auto") == "auto":
-            track = track_subject(str(source), 0, 0, subject=reframe.get("subject"), sample_fps=5)
     else:
         times = source_times(edit, np.arange(count, dtype=float)/count)
         stream = next(s for s in media["streams"] if s["codec_type"] == "video")
         duration = float(stream.get("duration") or media["format"].get("duration", 0))
         if start < 0 or end > duration + 1/max(1, _ratio(stream.get("avg_frame_rate"), 30)):
             raise ValueError(f"Source span {start}–{end} exceeds {source.name} ({duration}s)")
-        if reframe.get("mode", "auto") == "auto":
-            subject_start = float(reframe.get("subject_start", start)) if reframe.get("subject") else start
-            if not math.isfinite(subject_start) or not 0 <= subject_start <= start:
-                raise ValueError("reframe.subject_start must be between zero and source_start")
-            track = track_subject(str(source), subject_start, end, subject=reframe.get("subject"), sample_fps=5)
         reader = _VideoReader(source, start, end, stream, interpolation=interpolation)
     effects = edit.get("effects", {})
     zoom = _positive_float(effects.get("zoom", 1), "zoom")
@@ -421,6 +349,7 @@ def _render_shot(edit, output, width, height, fps, preview, media, interpolation
         finally:
             if reader:
                 reader.close()
+    return tracking_report(edit, track)
 
 
 def _validate_plan(plan):
@@ -466,6 +395,11 @@ def _validate_plan(plan):
     from project_plan import validate_slow_motion_policy
     validate_slow_motion_policy(plan)
     validate_text_tracks(plan)
+    from graphics_layers import validate_graphics
+    from tracking_review import validate_reframe
+    validate_graphics(plan)
+    for edit in edits:
+        validate_reframe(edit.get("reframe", {}), edit.get("source_start", 0), edit.get("source_end"))
     return width, height, fps, cursor
 
 
@@ -501,6 +435,8 @@ def _composite_tracks(manifest, output, compositor, width, height, fps, count, p
                     log.seek(0)
                     raise RuntimeError(f"Text assembly {label} failed: {log.read().decode('utf-8', 'replace')[-4000:]}")
         finally:
+            if hasattr(compositor, "close"):
+                compositor.close()
             for process in (decoder, encoder):
                 if process is None:
                     continue
@@ -512,10 +448,17 @@ def _composite_tracks(manifest, output, compositor, width, height, fps, count, p
                 process.wait()
 
 
-def render_project(plan, output_path, preview=False, cache_dir=None):
+def render_project(plan, output_path, preview=False, cache_dir=None, protected_paths=None):
     """Render a validated plan and return independently probed output metadata."""
+    protected = {Path(p).resolve() for p in (protected_paths or [])}
     if isinstance(plan, (str, Path)):
+        protected.add(Path(plan).resolve())
         plan = json.loads(Path(plan).read_text(encoding="utf-8"))
+    plan = deepcopy(plan)
+    from speech_project import refresh_source_captions
+    from timeline_map import refresh_anchors
+    refresh_source_captions(plan)
+    refresh_anchors(plan)
     for tool in ("ffmpeg", "ffprobe"):
         if not shutil.which(tool):
             raise RuntimeError(f"{tool} is required on PATH")
@@ -533,33 +476,33 @@ def render_project(plan, output_path, preview=False, cache_dir=None):
         else:  # Unusual relatively-prime aspect ratios require pixel rounding.
             factor = min(1, 360/width, 640/height)
             width, height = max(2, int(width*factor)//2*2), max(2, int(height*factor)//2*2)
-    compositor = TextCompositor(plan, width, height) if plan.get("titles") or plan.get("subtitles") else None
+    from graphics_layers import ProjectCompositor
+    compositor = ProjectCompositor(plan, width, height) if plan.get("titles") or plan.get("subtitles") or plan.get("graphics") else None
+    from font_diagnostics import inspect_project_fonts
+    font_report = inspect_project_fonts(plan)
+    missing_fonts = [item for item in font_report if item["status"] != "pass"]
+    if missing_fonts:
+        raise ValueError(f"Font coverage could not be verified: {missing_fonts}")
     duration = total_frames/fps
     output_path = Path(output_path).resolve()
     if output_path.suffix.lower() != ".mp4":
         raise ValueError("Output must be an .mp4 file")
     if output_path in [Path(e["source"]).resolve() for e in plan["edits"]]:
         raise ValueError("Output cannot overwrite a source")
-    audio = plan.get("audio") or {}
-    audio_path = Path(audio.get("path", ""))
-    if not audio_path.is_absolute() or not audio_path.is_file():
-        raise FileNotFoundError("Plan audio.path must be an existing absolute file")
-    if output_path == audio_path.resolve():
-        raise ValueError("Output cannot overwrite the soundtrack")
-    audio_info = probe(audio_path)
-    audio_stream = next((s for s in audio_info["streams"] if s["codec_type"] == "audio"), None)
-    if audio_stream is None:
-        raise ValueError("The soundtrack has no audio stream")
-    audio_duration = float(audio_stream.get("duration") or audio_info["format"].get("duration", 0))
-    audio_start = float(audio.get("start", 0))
-    if not math.isfinite(audio_start) or not 0 <= audio_start < audio_duration:
-        raise ValueError("Soundtrack start is outside the available audio")
-    if not audio.get("loop", False) and audio_start+duration > audio_duration+.002:
-        raise ValueError("The soundtrack is shorter than the edit; choose an earlier start or explicitly enable audio.loop")
+    from audio_mix import mix_project_audio, encoded_audio_report
+    from render_qa import referenced_files
+    protected.update(referenced_files(plan))
+    if output_path in protected:
+        raise ValueError("Output cannot overwrite an audio source")
+    report_path = output_path.with_suffix(".audio.json")
+    if report_path in protected:
+        raise ValueError("Audio report cannot overwrite a project source")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     cache = Path(cache_dir).resolve() if cache_dir else output_path.parent/".beat-sync-cache"
     cache.mkdir(parents=True, exist_ok=True)
+    audio_path, mix_report = mix_project_audio(plan, cache)
     shots, hashes, media_by_path = [], {}, {}
+    tracking_reports = []
     cache_hits = 0
     from project_plan import speed_bounds
     for edit in plan["edits"]:
@@ -575,6 +518,7 @@ def render_project(plan, output_path, preview=False, cache_dir=None):
         key = hashlib.sha256(json.dumps(_canonical_cache_value(signature), sort_keys=True,
                                         separators=(",", ":"), allow_nan=False).encode()).hexdigest()
         shot = cache/f"{key}.mp4"
+        tracking_path = cache/f"{key}.tracking.json"
         valid = False
         if shot.is_file():
             try:
@@ -586,15 +530,34 @@ def render_project(plan, output_path, preview=False, cache_dir=None):
             except (RuntimeError, ValueError, KeyError, StopIteration):
                 valid = False
         if valid:
+            try:
+                saved_tracking = json.loads(tracking_path.read_text(encoding="utf-8"))
+                saved_hash = saved_tracking.pop("cache_report_sha256", None)
+                report_hash = hashlib.sha256(json.dumps(saved_tracking, sort_keys=True, allow_nan=False).encode()).hexdigest()
+                valid = (saved_hash == report_hash and saved_tracking.get("cache_signature") == key
+                         and saved_tracking.get("video_sha256") == _file_digest(shot)
+                         and isinstance(saved_tracking.get("keyframes"), list))
+            except (OSError, ValueError, TypeError):
+                valid = False
+        if valid:
             cache_hits += 1
         else:
             temporary = cache/f"{key}.{uuid.uuid4().hex}.tmp.mp4"
             try:
-                _render_shot(edit, temporary, width, height, fps, preview, media_by_path[path], interpolation=interpolation)
+                tracking = _render_shot(edit, temporary, width, height, fps, preview, media_by_path[path], interpolation=interpolation)
                 os.replace(temporary, shot)
+                from project_workspace import write_json
+                tracking.update(cache_signature=key, video_sha256=_file_digest(shot))
+                tracking["cache_report_sha256"] = hashlib.sha256(json.dumps(tracking, sort_keys=True, allow_nan=False).encode()).hexdigest()
+                write_json(tracking_path, tracking)
             finally:
                 temporary.unlink(missing_ok=True)
         shots.append(shot)
+        tracking = json.loads(tracking_path.read_text(encoding="utf-8"))
+        tracking["shot_id"] = edit.get("id")
+        tracking["source_sha256"] = hashes[path]
+        tracking["timeline_start_frame"] = edit["timeline_start_frame"]
+        tracking_reports.append(tracking)
     with tempfile.TemporaryDirectory(prefix="assemble-", dir=cache) as scratch:
         manifest = Path(scratch)/"shots.txt"
         manifest.write_text("".join("file '"+p.as_posix().replace("'", "'\\''")+"'\n" for p in shots), encoding="utf-8")
@@ -607,9 +570,7 @@ def render_project(plan, output_path, preview=False, cache_dir=None):
                 args += ["-i", str(composed)]
             else:
                 args += ["-f", "concat", "-safe", "0", "-i", str(manifest)]
-            if audio.get("loop", False):
-                args += ["-stream_loop", "-1"]
-            args += ["-ss", f"{audio_start:.9f}", "-i", str(audio_path), "-map", "0:v:0", "-map", "1:a:0",
+            args += ["-i", str(audio_path), "-map", "0:v:0", "-map", "1:a:0",
                      "-c:v", "copy", "-af", f"atrim=duration={duration:.9f},asetpts=PTS-STARTPTS,aresample=48000",
                      "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-t", f"{duration:.9f}",
                      "-video_track_timescale", str(fps*1000), "-movflags", "+faststart", str(temporary)]
@@ -623,12 +584,19 @@ def render_project(plan, output_path, preview=False, cache_dir=None):
                 raise RuntimeError(f"Render verification failed: expected {total_frames} frames/{duration}s, got {actual_frames}/{actual_duration}s")
             if abs(float(sound.get("duration", 0))-duration) > .05 or sound.get("sample_rate") != "48000":
                 raise RuntimeError("Rendered soundtrack has an unexpected duration or sample rate")
+            audio_report = encoded_audio_report(temporary, mix_report)
             os.replace(temporary, output_path)
         finally:
             temporary.unlink(missing_ok=True)
+    from project_workspace import write_json
+    audio_report["encoded_path"] = str(output_path)
+    write_json(report_path, audio_report)
     return {"path": str(output_path), "duration": actual_duration, "frames": actual_frames,
             "width": video["width"], "height": video["height"], "fps": fps, "audio": True,
-            "audio_sample_rate": 48000, "preview": bool(preview), "cache_hits": cache_hits, "shots": len(shots)}
+            "audio_sample_rate": 48000, "audio_report": str(report_path),
+            "audio_loudness": audio_report["encoded_measurements"],
+            "preview": bool(preview), "cache_hits": cache_hits, "shots": len(shots),
+            "tracking": tracking_reports, "fonts": font_report}
 
 
 def main():

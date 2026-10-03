@@ -14,6 +14,8 @@ import math
 from pathlib import Path, PureWindowsPath
 
 from edit_presets import get_preset
+from editorial_feedback import explain_candidate, excluded_by_feedback, validate_preferences
+from music_structure import apply_overrides, segment_structure
 
 
 SECTION_NAMES = ("intro", "build", "drop", "outro")
@@ -100,6 +102,9 @@ def _sections(manual, beatmap, start, frame_count, fps, beat_frames):
                  "start": 0.0, "end": frame_count / fps, "method": "short-edit"}]
     points = _energy_points(beatmap)
     candidates = [frame for frame in beat_frames if frame_count * .25 <= frame <= frame_count * .72]
+    measured_events = beatmap.get("music_structure", {}).get("events", [])
+    rises = [event for event in measured_events if event.get("type") == "energy_rise"
+             and event.get("confidence", 0) >= .25 and start < event.get("time", 0) < start+frame_count/fps]
     default_drop = round(frame_count * .45)
     drop = min(candidates, key=lambda frame: abs(frame - default_drop)) if candidates else default_drop
     method = "beat-fractions"
@@ -113,10 +118,22 @@ def _sections(manual, beatmap, start, frame_count, fps, beat_frames):
             return after - before + .15 * after - .02 * abs(frame - default_drop) / frame_count
         drop = max(candidates, key=drop_score)
         method = "energy-rise-and-beats"
+    if rises:
+        strongest = max(rises, key=lambda event: event["confidence"])
+        event_frame = round((strongest["time"]-start)*fps)
+        nearby = [frame for frame in beat_frames if abs(frame-event_frame) <= fps*.3 and 2 <= frame <= frame_count-2]
+        if nearby:
+            drop = min(nearby, key=lambda frame: abs(frame-event_frame))
+            method = "measured-energy-event-hypothesis"
     intro_target = max(1, round(drop * .42))
     intro_candidates = [frame for frame in beat_frames if 0 < frame < drop]
     intro = min(intro_candidates, key=lambda frame: abs(frame - intro_target)) if intro_candidates else intro_target
     outro_target = round(frame_count * .86)
+    falls = [round((event["time"]-start)*fps) for event in measured_events
+             if event.get("type") in ("energy_fall", "hard_stop") and event.get("confidence", 0) >= .25
+             and drop+1 < round((event["time"]-start)*fps) < frame_count]
+    if falls:
+        outro_target = falls[-1]
     outro_candidates = [frame for frame in beat_frames if drop < frame < frame_count]
     outro = min(outro_candidates, key=lambda frame: abs(frame - outro_target)) if outro_candidates else outro_target
     boundaries = [0, max(1, min(intro, frame_count - 3)),
@@ -130,11 +147,13 @@ def _sections(manual, beatmap, start, frame_count, fps, beat_frames):
     return result
 
 
-def _validate_sections(sections, frame_count):
+def _validate_sections(sections, frame_count, mode="music"):
     position = 0
     for section in sections:
-        if section.get("name") not in SECTION_NAMES:
+        if mode == "music" and section.get("name") not in (*SECTION_NAMES, "flow"):
             raise ValueError(f"Unknown section name {section.get('name')!r}; use {SECTION_NAMES}")
+        if not isinstance(section.get("name"), str) or not section["name"].strip():
+            raise ValueError("Section names must be nonempty strings")
         begin = _integer(section.get("start_frame"), "section start_frame", 0)
         end = _integer(section.get("end_frame"), "section end_frame", 1)
         if begin != position or end <= begin or end > frame_count:
@@ -151,7 +170,7 @@ def _slots(sections, beats, recipe, fps):
     for section in sections:
         begin, end = section["start_frame"], section["end_frame"]
         interior = [frame for frame in beats if begin < frame < end]
-        stride = recipe["beat_stride"][section["name"]]
+        stride = recipe["beat_stride"].get(section["name"], recipe["beat_stride"]["intro"])
         boundaries = [begin]
         for frame in interior[stride - 1::stride]:
             if frame - boundaries[-1] >= min_frames and end - frame >= min_frames:
@@ -165,6 +184,29 @@ def _slots(sections, beats, recipe, fps):
             boundaries.append(choices[-1] if choices else boundaries[-1] + max_frames)
         boundaries.append(end)
         result.extend((left, right, section["name"]) for left, right in zip(boundaries, boundaries[1:]) if right > left)
+    return result
+
+
+def _phrase_slots(sections, structure, recipe, fps):
+    """Longer holds on measured phrase/event boundaries, with no fabricated beat grid."""
+    result = []
+    minimum = max(round(2 * fps), round(recipe["min_shot"] * fps))
+    maximum = max(minimum, round(max(4., recipe["max_shot"] * 1.5) * fps))
+    points = {item["output_start_frame"] for item in structure.get("phrases", [])}
+    points.update(item["output_frame"] for item in structure.get("events", [])
+                  if item.get("confidence", 0) >= .25)
+    for section in sections:
+        begin, end = section["start_frame"], section["end_frame"]
+        bounds = [begin]
+        for point in sorted(p for p in points if begin < p < end):
+            if point - bounds[-1] >= minimum and end - point >= minimum:
+                while point-bounds[-1] > maximum:
+                    bounds.append(bounds[-1]+maximum)
+                bounds.append(point)
+        while end-bounds[-1] > maximum:
+            bounds.append(bounds[-1]+maximum)
+        bounds.append(end)
+        result.extend((left, right, section["name"]) for left, right in zip(bounds, bounds[1:]))
     return result
 
 
@@ -355,30 +397,37 @@ def validate_slow_motion_policy(plan):
     return enabled
 
 
-def _clip_score(clip, section, recipe, selected, recent, requested_tags, slot_index):
+def _clip_explanation(clip, section, recipe, selected, recent, requested_tags, slot_index,
+                      profile=None, query="", model=None):
     tags = {str(tag).casefold() for tag in clip.get("tags", [])}
-    target = recipe["energy"][section]
-    score = 2.0 - abs(float(clip.get("energy", .5)) - target) * 2
-    score += float(clip.get("quality", .5)) * 2
-    score += len(tags.intersection(recipe["preferred_tags"])) * .25
-    score += len(tags.intersection(requested_tags)) * 2.0
+    target = recipe["energy"].get(section, .4)
+    components = {"energy_match": 2.0 - abs(float(clip.get("energy", .5)) - target) * 2,
+                  "quality": float(clip.get("quality", .5)) * 2,
+                  "preset_tags": len(tags.intersection(recipe["preferred_tags"])) * .25,
+                  "requested_tags": len(tags.intersection(requested_tags)) * 2.0,
+                  "shot_cycle": 0., "repeated_shot_type": 0., "repeated_still": 0.,
+                  "action_accent": 0., "visual_similarity": 0., "source_diversity": 0.}
     shot_type = _shot_type(clip.get("shot_type", "unknown"))
     cycle = recipe["shot_cycle"]
     if shot_type == cycle[slot_index % len(cycle)]:
-        score += 1.0
+        components["shot_cycle"] = 1.0
     if selected and shot_type != "unknown" and shot_type == _shot_type(selected[-1].get("shot_type")):
-        score -= 1.25
+        components["repeated_shot_type"] = -1.25
     if selected and clip["kind"] == "image" and selected[-1]["source"] == clip["source"]:
-        score -= 3.0
+        components["repeated_still"] = -3.0
     if section == "drop" and clip.get("action_time") is not None:
-        score += .8
+        components["action_accent"] = .8
     for previous in recent[-3:]:
         distance = _hash_distance(clip.get("visual_hash"), previous.get("visual_hash"))
         if distance is not None:
-            score -= 3.0 if distance <= 4 else (1.0 if distance <= 10 else 0.0)
+            components["visual_similarity"] -= 3.0 if distance <= 4 else (1.0 if distance <= 10 else 0.0)
         if str(previous["asset_id"]) == str(clip["asset_id"]):
-            score -= .3
-    return score
+            components["source_diversity"] -= .3
+    return explain_candidate(clip, sum(components.values()), components, profile, query, model)
+
+
+def _clip_score(clip, section, recipe, selected, recent, requested_tags, slot_index):
+    return _clip_explanation(clip, section, recipe, selected, recent, requested_tags, slot_index)["score"]
 
 
 def build_plan(beatmap, library, duration=25, preset="cinematic", fps=30,
@@ -401,6 +450,15 @@ def build_plan(beatmap, library, duration=25, preset="cinematic", fps=30,
     duration = _number(duration, "duration", 1 / fps)
     frame_count = round(duration * fps)
     actual_duration = frame_count / fps
+    if config.get("music_overrides") is not None:
+        beatmap = apply_overrides(beatmap, config["music_overrides"])
+    preferences = validate_preferences(config.get("preferences") or {})
+    query = config.get("query", "")
+    if not isinstance(query, str):
+        raise ValueError("query must be text")
+    editorial_model = config.get("editorial_model")
+    if editorial_model and "model" in editorial_model:
+        editorial_model = editorial_model["model"]
     recipe = get_preset(preset)
     for name in ("min_shot", "max_shot"):
         if name in config and config[name] is not None:
@@ -456,12 +514,16 @@ def build_plan(beatmap, library, duration=25, preset="cinematic", fps=30,
     beats = sorted({_number(beat, "beat timestamp", 0) for beat in beatmap.get("beats", [])})
     beat_frames = sorted({round((beat - audio_start) * fps) for beat in beats if audio_start <= beat <= audio_start + actual_duration})
     beat_frames = [frame for frame in beat_frames if 0 <= frame <= frame_count]
-    # Silence/unmetered audio still produces a complete project, using tempo as a fallback.
-    fallback_beats = not beat_frames
-    if fallback_beats:
-        interval = max(1, round(fps * 60 / _number(beatmap.get("tempo", 120) or 120, "tempo", 1)))
-        beat_frames = list(range(0, frame_count + 1, interval))
-    musical_sections = _sections(sections, beatmap, audio_start, frame_count, fps, beat_frames)
+    structure = segment_structure(beatmap, audio_start, actual_duration, fps, config.get("pacing_mode", "auto"))
+    pacing_mode = structure["pacing"]["mode"]
+    if not beat_frames and pacing_mode == "beat_cut":
+        pacing_mode = "phrase_flow"
+        structure["pacing"] = {"mode": pacing_mode, "confidence": 0., "reason": "No measured beats in selected range; using phrase flow"}
+    if pacing_mode == "phrase_flow" and sections is None:
+        musical_sections = [{"name": "flow", "start_frame": 0, "end_frame": frame_count,
+                             "start": 0., "end": actual_duration, "method": "phrase-flow", "confidence": .35}]
+    else:
+        musical_sections = _sections(sections, beatmap, audio_start, frame_count, fps, beat_frames)
     assets = _assets(library)
     if not assets:
         raise ValueError("Media library contains no assets")
@@ -469,7 +531,7 @@ def build_plan(beatmap, library, duration=25, preset="cinematic", fps=30,
     excluded = {str(item) for item in config.get("exclude", [])}
     usable = []
     for clip in clips:
-        if str(clip.get("id")) in excluded or clip.get("exclude") is True:
+        if str(clip.get("id")) in excluded or clip.get("exclude") is True or excluded_by_feedback(clip, preferences):
             continue
         asset_id = str(clip.get("asset_id"))
         if asset_id not in assets:
@@ -531,13 +593,14 @@ def build_plan(beatmap, library, duration=25, preset="cinematic", fps=30,
                     high = middle
             source_rate = low
         diagnostics.append(f"Unused source intervals are extended at {source_rate:.4f}x to meet the exact duration without repetition.")
-    if fallback_beats:
-        diagnostics.append("No detected beats in the selected audio range; the tempo grid is a fallback, not measured beat alignment.")
+    diagnostics.extend(structure.get("warnings", []))
+    diagnostics.append(structure["pacing"]["reason"])
 
     requested_tags = {str(tag).casefold() for tag in config.get("tags", [])}
     used, image_used, selected, edits = {}, set(), [], []
     position = 0
-    for slot_begin, slot_end, section in _slots(musical_sections, beat_frames, recipe, fps):
+    slots = _phrase_slots(musical_sections, structure, recipe, fps) if pacing_mode == "phrase_flow" else _slots(musical_sections, beat_frames, recipe, fps)
+    for slot_begin, slot_end, section in slots:
         while position < slot_end:
             wanted_frames = slot_end - position
             effective_rate = source_rate
@@ -576,7 +639,7 @@ def build_plan(beatmap, library, duration=25, preset="cinematic", fps=30,
                     capacity = wanted_frames if clip["kind"] == "image" else math.floor((end - begin) / capacity_rate * fps + 1e-6)
                     if capacity <= 0:
                         continue
-                    score = _clip_score(clip, section, recipe, selected, selected, requested_tags, len(edits))
+                    score = _clip_explanation(clip, section, recipe, selected, selected, requested_tags, len(edits), preferences, query, editorial_model)["score"]
                     ideal_capacity = wanted_frames if clip["kind"] == "image" else math.floor((end - begin) / effective_rate * fps + 1e-6)
                     options.append((ideal_capacity >= wanted_frames, capacity >= wanted_frames, score, min(capacity, wanted_frames), -index, clip, begin, end))
             if not options:
@@ -627,6 +690,27 @@ def build_plan(beatmap, library, duration=25, preset="cinematic", fps=30,
                 entry, slow, exit_speed = recipe["speed_ramp"]
                 proposed = [{"at": 0.0, "speed": entry}, {"at": action_fraction, "speed": slow}, {"at": 1.0, "speed": exit_speed}]
                 area = _curve_area(proposed)
+                # A 2x -> 1x -> 2x curve needs 1.5 source seconds per output
+                # second. Reserve that source before normalizing the renderer's
+                # curve; otherwise normalization silently introduces slow motion.
+                if effective_rate >= 1 and max(entry, slow, exit_speed) / min(entry, slow, exit_speed) <= max_speed:
+                    ramp_span = output_duration * area / min(entry, slow, exit_speed)
+                    ramp_begin = available_start
+                    if action is not None and interior_beats:
+                        proposed_start = float(action) - ramp_span * _curve_area(proposed, action_fraction) / area
+                        if available_start <= proposed_start and proposed_start + ramp_span <= available_end:
+                            ramp_begin = proposed_start
+                    ramp_end = ramp_begin + ramp_span
+                    if ramp_end <= available_end + 1e-8:
+                        trial_used = {source: list(ranges) for source, ranges in used.items()}
+                        trial_used.setdefault(clip["source"], []).append((ramp_begin, ramp_end))
+                        reserve_rate = min_speed if shortage == "extend" else source_rate
+                        remaining_capacity = sum(math.floor((right-left) / reserve_rate * fps + 1e-7)
+                                                 for left, right in _remaining_intervals(usable, trial_used))
+                        unused_still = any(c["kind"] == "image" and c["source"] not in image_used for c in usable)
+                        if allow_repeats or unused_still or remaining_capacity >= frame_count-position-take_frames:
+                            begin, end, span = ramp_begin, ramp_end, ramp_span
+                            actual_rate = span/output_duration
                 rates = [point["speed"] * actual_rate / area for point in proposed]
                 if min(rates) >= min_speed - 1e-7 and max(rates) <= max_speed + 1e-7:
                     curve = proposed
@@ -657,6 +741,22 @@ def build_plan(beatmap, library, duration=25, preset="cinematic", fps=30,
                     "section": section, "effects": effects, "speed_points": curve,
                     "average_speed": (end - begin) / output_duration, "reframe": reframe,
                     "tags": deepcopy(clip.get("tags", [])), "shot_type": _shot_type(clip.get("shot_type", "unknown"))}
+            explanation = _clip_explanation(clip, section, recipe, selected, selected, requested_tags, len(edits), preferences, query, editorial_model)
+            alternatives, seen_alternatives = [], {str(clip["id"])}
+            for option in sorted(options, key=lambda option: option[:5], reverse=True):
+                candidate = option[5]
+                if str(candidate["id"]) in seen_alternatives:
+                    continue
+                seen_alternatives.add(str(candidate["id"]))
+                alternative = _clip_explanation(candidate, section, recipe, selected, selected, requested_tags, len(edits), preferences, query, editorial_model)
+                alternative["available_source"] = [option[6], option[7]] if candidate["kind"] == "video" else None
+                alternative["fits_slot"] = bool(option[0])
+                alternatives.append(alternative)
+                if len(alternatives) == 3:
+                    break
+            item["selection"] = {**explanation, "alternatives": alternatives,
+                                 "constraint_order": ["permitted source", "enough unused duration", "editorial score"],
+                                 "used_source_range": [begin, end], "pacing_mode": pacing_mode}
             if anchor:
                 item["action_anchor"] = anchor
             if clip["kind"] == "video":
@@ -674,11 +774,12 @@ def build_plan(beatmap, library, duration=25, preset="cinematic", fps=30,
             else:
                 used.setdefault(clip["source"], []).append((begin, end))
             position += take_frames
-    plan = {"schema_version": 2, "audio": {"path": audio_path, "start": audio_start, "duration": song_duration},
+    plan = {"schema_version": 2, "mode": "music", "audio": {"path": audio_path, "start": audio_start, "duration": song_duration},
             "output": {"width": width, "height": height, "fps": fps}, "duration_frames": frame_count,
             "duration": actual_duration, "requested_duration": duration, "preset": preset,
             "sections": musical_sections, "beat_frames": beat_frames, "assets": deepcopy(library["assets"]),
-            "clips": clips, "edits": edits, "diagnostics": diagnostics,
+            "clips": clips, "edits": edits, "diagnostics": diagnostics, "music_structure": structure,
+            "editorial": {"query": query, "preferences": deepcopy(preferences), "model": deepcopy(editorial_model)},
             "policies": {"allow_repeats": allow_repeats, "shortage": shortage,
                          "min_speed": min_speed, "max_speed": max_speed, **slow_policy}}
     validate_plan(plan)
@@ -700,13 +801,17 @@ def validate_plan(plan):
     frames = _integer(plan.get("duration_frames"), "duration_frames")
     if abs(_number(plan.get("duration"), "duration", 0) - frames / fps) > 1e-7:
         raise ValueError("duration must equal duration_frames / fps")
-    audio = plan.get("audio", {})
-    if not _absolute(audio.get("path")):
-        raise ValueError("audio.path must be absolute")
-    start = _number(audio.get("start"), "audio.start", 0)
-    if "duration" in audio and start + frames / fps > _number(audio["duration"], "audio.duration", 0) + 1e-7:
-        raise ValueError("Audio segment exceeds the source track")
-    _validate_sections(plan.get("sections", []), frames)
+    mode = plan.get("mode", "music")
+    if mode not in ("music", "speech", "motion"):
+        raise ValueError("mode must be music, speech or motion")
+    audio = plan.get("audio")
+    if mode == "music" or audio:
+        if not isinstance(audio, dict) or not _absolute(audio.get("path")):
+            raise ValueError("audio.path must be absolute")
+        start = _number(audio.get("start"), "audio.start", 0)
+        if "duration" in audio and start + frames / fps > _number(audio["duration"], "audio.duration", 0) + 1e-7:
+            raise ValueError("Audio segment exceeds the source track")
+    _validate_sections(plan.get("sections", []), frames, mode)
     assets = _assets(plan)
     if not assets:
         raise ValueError("Project requires an asset manifest")
@@ -807,7 +912,7 @@ def validate_plan(plan):
         box = reframe.get("subject")
         if "subject_start" in reframe:
             _number(reframe["subject_start"], "reframe.subject_start", 0, begin)
-        if reframe.get("mode") == "manual" and box is None:
+        if reframe.get("mode") == "manual" and box is None and not reframe.get("keyframes"):
             raise ValueError("Manual reframing requires a normalized subject bbox [x,y,w,h]")
         if box is not None:
             if not isinstance(box, (tuple, list)) or len(box) != 4:
@@ -819,6 +924,18 @@ def validate_plan(plan):
     if position != frames:
         raise ValueError("Shots do not cover duration_frames exactly")
     validate_slow_motion_policy(plan)
+    from audio_mix import validate_audio_mix
+    validate_audio_mix(plan, check_files=False)
+    from graphics_layers import validate_graphics
+    from tracking_review import validate_reframe
+    validate_graphics(plan)
+    for edit in edits:
+        validate_reframe(edit.get("reframe", {}), edit["source_start"], edit["source_end"])
+    from timeline_map import validate_timeline_metadata
+    validate_timeline_metadata(plan)
+    if "speech" in plan:
+        from speech_project import validate_speech
+        validate_speech(plan)
     if any(key in plan for key in ("titles", "subtitles", "title_style", "subtitle_style")):
         from text_overlay import validate_text_tracks
         validate_text_tracks(plan)

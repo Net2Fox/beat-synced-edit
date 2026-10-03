@@ -1,6 +1,7 @@
 """CLI entry points for titles, caption files and optional local speech recognition."""
 
 import argparse
+import json
 import math
 from pathlib import Path
 import subprocess
@@ -53,6 +54,7 @@ def register_text_commands(sub):
     title.add_argument("--text", required=True)
     title.add_argument("--id", help="Optional stable cue id")
     title.add_argument("--start", type=float, default=0)
+    title.add_argument("--anchor", help="Semantic anchor JSON: word, shot, beat, event, action or source")
     until = title.add_mutually_exclusive_group(required=True)
     until.add_argument("--end", type=float)
     until.add_argument("--duration", type=float)
@@ -108,10 +110,12 @@ def _style_operation(args, track):
 
 
 def _input_paths(args, plan):
-    paths = [plan["audio"]["path"]]
+    paths = [plan.get("audio", {}).get("path")]
     paths.extend(e["source"] for e in plan["edits"])
     paths.extend(a["path"] for a in plan.get("assets", []))
     paths.extend(c["source"] for c in plan.get("clips", []))
+    paths.extend(t["path"] for t in plan.get("audio_mix", {}).get("tracks", []))
+    paths.extend(e.get("audio_source", {}).get("source") for e in plan["edits"])
     paths.extend(getattr(args, key, None) for key in ("audio", "file"))
     return {Path(path).expanduser().resolve() for path in paths if path}
 
@@ -128,6 +132,8 @@ def run_text_command(args):
         values = {"text": args.text, "start": args.start, "end": end, "style": _style(args)}
         if args.id:
             values["id"] = args.id
+        if args.anchor:
+            values["anchor"] = json.loads(args.anchor)
         return _save(args, [{"op": "title_add", "values": values}])
     if args.command == "text-style":
         operations = _style_operation(args, args.track)
@@ -153,8 +159,13 @@ def run_text_command(args):
     if args.command == "subtitles-transcribe":
         from speech_transcribe import transcribe_audio
         from subtitle_tools import segment_transcript
-        source = Path(args.audio or plan["audio"]["path"]).expanduser().resolve(strict=True)
-        start = args.audio_start if args.audio_start is not None else (0 if args.audio else plan["audio"].get("start", 0))
+        mixed = bool(not args.audio and plan.get("audio_mix"))
+        if mixed:
+            from audio_mix import mix_project_audio
+            source, _ = mix_project_audio(plan, Path(args.project).resolve().parent/"cache")
+        else:
+            source = Path(args.audio or plan["audio"]["path"]).expanduser().resolve(strict=True)
+        start = args.audio_start if args.audio_start is not None else (0 if args.audio or mixed else plan["audio"].get("start", 0))
         if not math.isfinite(start) or start < 0 or not math.isfinite(args.offset):
             raise ValueError("Audio start must be nonnegative and offset must be finite")
         work = Path(args.project).resolve().parent
@@ -170,7 +181,7 @@ def run_text_command(args):
         with tempfile.TemporaryDirectory(prefix="speech-", dir=work) as temporary:
             wav = Path(temporary) / "speech.wav"
             command = ["ffmpeg", "-y", "-v", "error", "-nostdin"]
-            if not args.audio and plan["audio"].get("loop", False):
+            if not args.audio and not mixed and plan["audio"].get("loop", False):
                 command += ["-stream_loop", "-1"]
             command += ["-ss", str(start), "-i", str(source), "-t", str(plan["duration"]),
                         "-vn", "-map", "0:a:0", "-af",

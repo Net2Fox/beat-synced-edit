@@ -9,6 +9,13 @@ local_files_only=True to run without model downloads.
 import math
 from pathlib import Path
 
+_MODEL_CACHE = {}
+
+
+def clear_model_cache():
+    """Explicitly release batch recognizers (normal CLI lifetime is one run)."""
+    _MODEL_CACHE.clear()
+
 
 def _time(value, name):
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
@@ -50,7 +57,10 @@ def transcribe_audio(audio_path, model="small", language=None, device="cpu",
     if options.get("task", "transcribe") != "transcribe":
         raise ValueError("Only transcription is supported; translate text separately without changing its timings")
     try:
-        recognizer = WhisperModel(str(model), **model_options)
+        key = (WhisperModel, str(model), tuple(sorted(model_options.items())))
+        if key not in _MODEL_CACHE:
+            _MODEL_CACHE[key] = WhisperModel(str(model), **model_options)
+        recognizer = _MODEL_CACHE[key]
         raw_segments, info = recognizer.transcribe(str(source), **options)
         result = []
         # Recognition is lazy: iterating here completes it before reporting success.

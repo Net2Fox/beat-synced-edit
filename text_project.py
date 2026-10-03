@@ -23,7 +23,7 @@ def _frame(seconds, fps):
 def _values(values, fps):
     if not isinstance(values, dict):
         raise ValueError("Text values must be an object")
-    allowed = {"id", "text", "start", "end", "start_frame", "end_frame", "style", "words"}
+    allowed = {"id", "text", "start", "end", "start_frame", "end_frame", "style", "words", "anchor", "anchor_duration_frames"}
     if set(values) - allowed:
         raise ValueError(f"Unknown text fields: {sorted(set(values) - allowed)}")
     result = deepcopy(values)
@@ -52,6 +52,8 @@ def apply_text_operation(plan, operation):
             raise ValueError("track must be titles or subtitles")
         if kind == "text_clear":
             plan[track] = []
+            if track == "subtitles" and "speech" in plan:
+                plan["speech"]["captions_enabled"] = False
             return
         values = operation.get("values", {})
         if not isinstance(values, dict):
@@ -68,6 +70,8 @@ def apply_text_operation(plan, operation):
         if not isinstance(cues, list):
             raise ValueError("subtitles_replace requires a cues array")
         plan["subtitles"] = [_values(cue, fps) for cue in cues]
+        if "speech" in plan:
+            plan["speech"]["captions_enabled"] = False
         return
     if kind == "subtitles_shift":
         delta = _frame(operation.get("seconds"), fps)
@@ -90,6 +94,10 @@ def apply_text_operation(plan, operation):
                 cue["words"] = words
             shifted.append(cue)
         plan["subtitles"] = shifted
+        if "speech" in plan:
+            plan["speech"]["captions_enabled"] = False
+            for cue in shifted:
+                cue.pop("source_caption", None)
         return
     track_name = "titles" if kind.startswith("title_") else "subtitles"
     track = plan.setdefault(track_name, [])
@@ -106,6 +114,11 @@ def apply_text_operation(plan, operation):
         track.append(cue)
     elif action == "update":
         cue = _find(track, operation.get("id"))
+        if cue.get("source_caption"):
+            # Explicit output-cue edits detach that occurrence; stable source
+            # corrections use speech-correct. Later revisions cannot undo it.
+            plan.setdefault("speech", {}).setdefault("detached_captions", []).append(cue["id"])
+            cue.pop("source_caption", None)
         values = _values(operation.get("values"), fps)
         if "id" in values and values["id"] != cue["id"]:
             raise ValueError("Updating text must preserve its stable id")
@@ -129,7 +142,10 @@ def apply_text_operation(plan, operation):
             cue.setdefault("style", {}).update(style)
         cue.update(values)
     elif action == "remove":
-        track.remove(_find(track, operation.get("id")))
+        cue = _find(track, operation.get("id"))
+        if cue.get("source_caption"):
+            plan.setdefault("speech", {}).setdefault("detached_captions", []).append(cue["id"])
+        track.remove(cue)
     else:
         raise ValueError(f"Unknown text operation: {kind}")
     track.sort(key=lambda cue: (cue.get("start_frame", -1), cue.get("end_frame", -1)))

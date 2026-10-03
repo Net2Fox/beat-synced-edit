@@ -130,6 +130,9 @@ def apply_revisions(plan, operations):
     """
     from project_plan import validate_plan, _slow_motion_authorized
     from text_project import TEXT_OPERATIONS, apply_text_operation
+    from speech_project import SPEECH_OPERATIONS, apply_speech_operation, refresh_source_captions
+    from timeline_map import refresh_anchors
+    from graphics_commands import GRAPHICS_OPERATIONS, apply_graphics_operation
 
     if not isinstance(operations, list) or not operations:
         raise ValueError("revisions must be a non-empty list of operations")
@@ -163,6 +166,10 @@ def apply_revisions(plan, operations):
             continue
         elif kind in TEXT_OPERATIONS:
             apply_text_operation(result, operation)
+        elif kind in SPEECH_OPERATIONS:
+            apply_speech_operation(result, operation)
+        elif kind in GRAPHICS_OPERATIONS:
+            apply_graphics_operation(result, operation)
         elif kind == "reorder":
             order = operation.get("order", [])
             if len(order) != len(edits) or set(order) != {e["id"] for e in edits}:
@@ -204,11 +211,14 @@ def apply_revisions(plan, operations):
                 mode = operation.get("mode", "manual")
                 if mode not in ("auto", "center", "manual", "contain"):
                     raise ValueError("reframe mode must be auto, center, manual, or contain")
-                if mode == "manual" and not operation.get("subject"):
+                if mode == "manual" and not operation.get("subject") and not operation.get("keyframes"):
                     raise ValueError("manual reframe requires normalized subject bbox [x,y,w,h]")
                 for shot in selected:
                     shot["reframe"] = {"mode": mode, "subject": operation.get("subject"),
                                        "subject_start": operation.get("subject_start", shot["source_start"])}
+                    for key in ("keyframes", "sample_fps", "confidence_threshold"):
+                        if key in operation:
+                            shot["reframe"][key] = copy.deepcopy(operation[key])
             elif kind == "speed":
                 points = operation.get("points")
                 if not isinstance(points, list) or len(points) < 2:
@@ -240,6 +250,9 @@ def apply_revisions(plan, operations):
             else:
                 raise ValueError(f"Unknown revision operation: {kind!r}")
         _retime(result, update_sections=kind in ("duration", "reorder"))
+    if any(operation.get("op") not in TEXT_OPERATIONS for operation in operations):
+        refresh_source_captions(result)
+    refresh_anchors(result)
     validate_plan(result)
     result["revision"] = int(plan.get("revision", 0)) + 1
     result.setdefault("revision_log", []).append({
@@ -254,9 +267,15 @@ def revise_file(path, operations, output=None):
     original = read_json(path)
     revised = apply_revisions(original, operations)
     destination = Path(output).resolve() if output else path
+    from render_qa import referenced_files
+    protected = referenced_files(original) | referenced_files(revised) | referenced_files(operations)
+    if destination in protected and destination != path:
+        raise ValueError("Revised project cannot overwrite a source resource")
     # Retain an immutable copy of the prior project before replacing it.
     digest = hashlib.sha256(json.dumps(original, sort_keys=True).encode()).hexdigest()[:12]
     history = destination.parent / ".history" / f"{destination.stem}-{digest}.json"
+    if history in protected or history == path:
+        raise ValueError("Revision history cannot overwrite a source resource")
     if not history.exists():
         write_json(history, original)
     write_json(destination, revised)

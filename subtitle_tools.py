@@ -84,7 +84,7 @@ def _frame_range(start, end, fps, count, shift=0):
     return first, last
 
 
-def import_subtitles(path, plan, offset=0, timebase="project"):
+def import_subtitles(path, plan, offset=0, timebase="project", preserve_source_times=False):
     """Import UTF-8 SRT/VTT, shift seconds, and clip cues to a project's frames.
 
     ``soundtrack`` timestamps refer to the untrimmed music source; its selected
@@ -136,9 +136,11 @@ def import_subtitles(path, plan, offset=0, timebase="project"):
             raise ValueError(f"{context}: missing blank line between cues or unexpected timestamp in text")
         text = _text("\n".join(body), context, markup=True)
         frame_range = _frame_range(begin, end, fps, count, shift)
-        if frame_range:
+        if preserve_source_times:
+            cues.append({"text": text, "start": begin+shift, "end": end+shift})
+        elif frame_range:
             cues.append({"text": text, "start_frame": frame_range[0], "end_frame": frame_range[1]})
-    cues.sort(key=lambda cue: (cue["start_frame"], cue["end_frame"]))
+    cues.sort(key=lambda cue: (cue.get("start_frame", cue.get("start")), cue.get("end_frame", cue.get("end"))))
     return [{"id": f"sub-{index:03d}", **cue} for index, cue in enumerate(cues, 1)]
 
 

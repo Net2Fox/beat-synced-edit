@@ -16,7 +16,12 @@ import sys
 import os
 import json
 import argparse
+import tempfile
 import numpy as np
+
+# Numba must not attempt to cache into an installed, read-only skill/dependency
+# directory. Respect an explicit cache setting, otherwise use the user's temp.
+os.environ.setdefault("NUMBA_CACHE_DIR", os.path.join(tempfile.gettempdir(), "beat-sync-numba-cache"))
 
 try:
     import librosa
@@ -100,7 +105,7 @@ def find_top_segments(times, energy, target_duration=15.0, num_segments=3):
     return segments
 
 
-def analyze_audio(audio_path, hop_length=512, segment_duration=15.0):
+def analyze_audio(audio_path, hop_length=512, segment_duration=15.0, overrides=None):
     """
     Analyze audio file for beats, tempo, and energy.
 
@@ -206,9 +211,14 @@ def analyze_audio(audio_path, hop_length=512, segment_duration=15.0):
     best_segment = top_segments[0] if top_segments else {"start": 0, "end": 0, "duration": 0, "avg_energy": 0}
     best_segment_beats = top_segment_beats[0] if top_segment_beats else []
 
-    return {
-        "file": audio_path,
-        "duration": round(duration, 2),
+    from music_structure import analyze_structure, apply_overrides
+    onset_envelope = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop_length)
+    onset_frames = librosa.onset.onset_detect(onset_envelope=onset_envelope, sr=sr, hop_length=hop_length)
+    onset_times = librosa.frames_to_time(onset_frames, sr=sr, hop_length=hop_length)
+    structure = analyze_structure(times, rms, onset_times, onset_envelope[onset_frames], beat_times, duration)
+    result = {
+        "file": os.path.abspath(audio_path),
+        "duration": round(duration, 9),
         "tempo": round(tempo, 1),
         "beat_count": len(beat_times),
         "beats": [round(float(t), 3) for t in beat_times],
@@ -223,8 +233,10 @@ def analyze_audio(audio_path, hop_length=512, segment_duration=15.0):
         "best_segment_beat_count": len(best_segment_beats),
         # New fields for multiple segments
         "top_segments": top_segments,
-        "top_segment_beats": top_segment_beats
+        "top_segment_beats": top_segment_beats,
+        "music_structure": structure,
     }
+    return apply_overrides(result, overrides) if overrides is not None else result
 
 
 def main():
@@ -232,11 +244,14 @@ def main():
     parser.add_argument("audio_file", help="Path to audio file (mp3, wav, etc.)")
     parser.add_argument("-o", "--output", help="Output JSON file path", default=None)
     parser.add_argument("--html", action="store_true", help="Also generate HTML visualization")
+    parser.add_argument("--overrides", help="JSON of manual beats/phrases/events/pacing_mode with reason")
 
     args = parser.parse_args()
 
     # Analyze audio
-    result = analyze_audio(args.audio_file)
+    with open(args.overrides, encoding="utf-8-sig") if args.overrides else open(os.devnull) as source:
+        overrides = json.load(source) if args.overrides else None
+    result = analyze_audio(args.audio_file, overrides=overrides)
 
     # Determine output path
     if args.output:
