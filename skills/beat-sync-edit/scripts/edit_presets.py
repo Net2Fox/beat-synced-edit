@@ -12,7 +12,7 @@ PRESETS = {
         "preferred_tags": ["landscape", "travel", "nature", "portrait"],
         "shot_cycle": ["wide", "medium", "close"],
         "effects": {"flash": 0.08, "zoom": 1.04, "shake": 0.0, "grade": "cinematic"},
-        "speed_ramp": [1.15, 0.8, 1.15],
+        "speed_ramp": [1.4, 1.0, 1.4],
     },
     "car": {
         "description": "Wide/detail alternation, accelerating pace and punchy drop accents.",
@@ -22,7 +22,7 @@ PRESETS = {
         "preferred_tags": ["car", "vehicle", "wheel", "driving", "drift", "detail"],
         "shot_cycle": ["wide", "detail", "action", "close"],
         "effects": {"flash": 0.65, "zoom": 1.15, "shake": 0.25, "grade": "cool"},
-        "speed_ramp": [1.6, 0.65, 1.6],
+        "speed_ramp": [2.0, 1.0, 2.0],
     },
     "gaming": {
         "description": "Action-focused rapid cuts, vivid color and timed impact accents.",
@@ -32,7 +32,7 @@ PRESETS = {
         "preferred_tags": ["game", "gaming", "action", "kill", "win", "highlight"],
         "shot_cycle": ["wide", "action", "close", "action"],
         "effects": {"flash": 0.45, "zoom": 1.12, "shake": 0.15, "grade": "vivid"},
-        "speed_ramp": [1.8, 0.7, 1.8],
+        "speed_ramp": [2.4, 1.0, 2.4],
     },
     "product": {
         "description": "Clean overview/detail sequences with gentle motion and warm color.",
@@ -42,7 +42,7 @@ PRESETS = {
         "preferred_tags": ["product", "detail", "fashion", "texture", "packaging"],
         "shot_cycle": ["wide", "detail", "close", "medium"],
         "effects": {"flash": 0.1, "zoom": 1.06, "shake": 0.0, "grade": "warm"},
-        "speed_ramp": [1.1, 0.9, 1.1],
+        "speed_ramp": [1.2, 1.0, 1.2],
     },
 }
 

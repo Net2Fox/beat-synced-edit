@@ -1,29 +1,33 @@
-# Beat-Sync Edit for Codex
+# Beat-Sync Edit for Codex and Claude Code
 
 **English** · [Русский](README.ru.md) · [Full capabilities](docs/capabilities.md)
 
 Create music-synced edits from your videos and photos by describing the result
-to Codex. This **Net2Fox fork** adds a persistent editing project, exact output
-duration, subject tracking, titles, subtitles and controlled slow motion to
+to Codex or Claude Code. This **Net2Fox fork** adds a persistent editing project,
+exact output duration, speech-led editing, audio mixing, local motion graphics,
+subject tracking, captions and controlled slow motion to
 [ZiadAbdelkarim's original project](https://github.com/ZiadAbdelkarim/beat-synced-edit).
 
 Use it for TikTok, YouTube Shorts, Reels, travel montages, car edits, gaming
 highlights and product videos. It edits existing media; it does not generate
-new footage. The Python tools can also run directly without Codex.
+new footage. The Python tools can also run directly without an agent.
 
 ## What you can make
 
 | Capability | What it does |
 |---|---|
-| Music-synced montage | Cuts to detected beats, varies pacing across intro/build/drop/outro and accepts a chosen soundtrack start. |
+| Music-synced montage | Measured beat confidence, phrase-flow fallback, editable musical events and source-budgeted acceleration ramps. |
+| Speech shorts | Select complete phrases, preserve useful pauses and original speech under B-roll; correct stable words and import translations. |
+| Audio | Source/voice/music/SFX tracks, fades, speech ducking, measured loudness and optional bar-based music arrangement. |
 | Mixed media | Combines videos and still images from files, folders or ZIP archives. |
-| Content-aware selection | Uses visual observations supplied by Codex or the editor: subject tags, shot sizes, action moments and quality. |
-| Framing | Vertical, square or horizontal output; subject tracking, fixed crops and letterboxing. |
+| Content-aware selection | Reviewed annotations, explained scores, alternatives, query/preferences, persistent accept/reject feedback and held-out calibration. |
+| Framing | Vertical, square or horizontal output; tracking diagnostics, manual camera keyframes, fixed crops and letterboxing. |
+| Graphic compositions | Reusable styles/safe areas, local editable cards/counters/overlays, and an optional Remotion composition adapter. |
 | Looks and accents | Four editable presets, color grades, punch-ins, flashes, shake and photo motion. |
 | Speed control | At least 1× playback by default. Explicitly requested slow motion uses optical-flow interpolation. |
 | Text | Animated titles, styled captions, SRT/VTT import/export and optional local speech recognition with word highlighting. |
 | Revisions | Save a project, preview it, replace or reorder shots, revise text and reuse unchanged shot caches. |
-| Export | H.264/AAC MP4 with verified frame count, dimensions and audio; separate SRT/VTT files when requested. |
+| Export and review | H.264/AAC MP4, decode/audio/black-frame QA, contact sheets, input-bound execution plans, batch caches and real-media review manifests. |
 
 See the [complete capability guide](docs/capabilities.md) for every supported
 workflow, preset differences, examples and practical limits, including the
@@ -31,7 +35,7 @@ specialized tools inherited from the original project.
 
 ## Requirements
 
-- **Codex with local file and command access** for conversational editing.
+- **Codex or Claude Code with local file and command access** for conversational editing.
   The CLI alone does not require Codex or an OpenAI API key.
 - **Python 3.12 recommended.** This fork was tested on Windows with Python 3.12.
   macOS/Linux setup commands are included; they are not a claim of a tested
@@ -46,7 +50,13 @@ The base environment uses librosa, PySceneDetect, OpenCV, NumPy and Pillow.
 Speech recognition is optional and uses Faster Whisper. A GPU is not required;
 speech defaults to CPU/int8 and rendering/interpolation run locally.
 
-## Install the Codex skill
+## Install the skill
+
+`skills/beat-sync-edit` is the canonical package. `.claude/skills/beat-sync-edit`
+is a complete, synchronized copy for Claude Code in this repository, including
+the same instructions, runtime modules, references and licenses. For a Claude
+Code checkout use that directory as `skillRoot` in the environment setup below.
+Both agents use `edit_project.py`; neither is routed through the legacy planner.
 
 ### Ask Codex to install it
 
@@ -272,10 +282,16 @@ for style settings, offsets, model caches and word timestamps.
 - [Codex skill instructions](skills/beat-sync-edit/SKILL.md)
 - [Project workflow and revision format](skills/beat-sync-edit/references/project-workflow.md)
 - [Titles, subtitles and speech recognition](skills/beat-sync-edit/references/text-and-subtitles.md)
+- [Speech-first edits and source-bound captions](skills/beat-sync-edit/references/speech-workflow.md)
+- [Audio mixing and music arrangement](skills/beat-sync-edit/references/audio-workflow.md)
+- [Musical confidence, selection feedback and evaluation](skills/beat-sync-edit/references/music-editorial.md)
+- [Graphics, tracking review, QA and batch tools](skills/beat-sync-edit/references/workflow-extensions.md)
 - [Specialized legacy workflows](skills/beat-sync-edit/references/legacy-workflow.md)
 
 Root Python files are the source of truth. After changing them, rebuild the
-installable skill copy. Run checks with the dependency environment and FFmpeg:
+both installable skill copies. The bundle checker verifies every runtime module
+and detects instruction/reference drift between Codex and Claude Code.
+Run checks with the dependency environment and FFmpeg:
 
 ```sh
 python tools/build_codex_skill.py
@@ -284,12 +300,16 @@ python -X utf8 -m unittest discover -s tests -p "test_*.py"
 python -X utf8 tests/smoke_test.py
 python -X utf8 tests/project_smoke_test.py
 python -X utf8 tests/text_smoke_test.py
+python -X utf8 tests/music_editorial_smoke.py
 ```
 
 Smoke tests create synthetic media in ignored `work/` folders. They do not need
 personal footage or download speech models. The legacy smoke accepts
 `--skill-dir`; project/text smokes accept `--scripts-dir` to verify an installed
 copy. These are local checks, not a claim of CI coverage on every platform.
+Synthetic fixtures do not establish real-world ASR accuracy, subject identity,
+musical taste or editorial quality. Real-media manifests remain `not_reviewed`
+or `missing_materials` until the relevant sources and actual review are supplied.
 
 ## Original project and license
 
@@ -297,8 +317,8 @@ This fork builds on [ZiadAbdelkarim/beat-synced-edit](https://github.com/ZiadAbd
 The original README is preserved **unchanged** in [README.upstream.md](README.upstream.md),
 from upstream commit
 [`48c09c9`](https://github.com/ZiadAbdelkarim/beat-synced-edit/blob/48c09c92ee69c2d89b7e44b146bbd7b9c26fff08/README.md).
-Its demonstrations describe the original project. The inherited CLI tools and
-Claude Code skill remain in the repository; the Codex workflow described here
-uses the fork's project editor. See [UPSTREAM.json](UPSTREAM.json) for provenance.
+Its demonstrations describe the original project. The inherited CLI tools remain
+available; both current agent packages use this fork's project editor.
+See [UPSTREAM.json](UPSTREAM.json) for provenance.
 
 Released under the [MIT license](LICENSE), with the original attribution retained.

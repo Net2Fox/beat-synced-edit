@@ -1,107 +1,130 @@
 ---
 name: beat-sync-edit
-description: Turn a song + raw footage into a beat-synced edit. Runs the four-stage pipeline (beat analysis, scene tagging, EDL planning, render) and applies user-described ffmpeg effects — white flashes, stretch punches, hue shifts, speed ramps — at beat-accurate timestamps.
+description: Create and revise music edits, speech-first Shorts/Reels/TikToks and local motion graphics from supplied media. Use for beat-sync, эдиты, монтаж речи, B-roll, audio mixing, captions, tracking, speed ramps and video export in Codex or Claude Code.
 ---
 
 # Beat-Sync Edit
 
-Drive the deterministic pipeline conversationally. The user describes the edit
-they want ("cut my footage to the chorus, white flash on every drop, make it
-9:16"); you run the stages, apply effects, and deliver the file.
+Turn supplied footage, speech/music and creative directions into a saved editing
+project, a reviewable preview and a finished MP4. This instruction is canonical
+for both Codex and Claude Code. Use the same project CLI in either agent.
 
-## The pipeline (run in order)
+## Setup and paths
 
-```
-python3 beat_map.py <song>                       # beats, energy, peaks/valleys → <song>_beatmap.json
-python3 clip_tag.py <footage> --html --thumbs    # scenes + motion/energy tags → <footage>_clips.json
-python3 plan_edit.py <beatmap> <clips> --html    # energy-matched EDL → <name>_edl.json
-python3 render_edit.py <edl> -a <song> -v <footage>   # final MP4
-python3 vertical_style.py <mp4>                  # optional 9:16 squeeze + grade
-```
+Resolve `skillRoot` from this SKILL.md. Python tools are in `scripts/` and local
+dependencies belong in `.venv/`. The environment is not shipped in Git.
 
-- Read the beatmap's `peaks`/`valleys` and the EDL before adding effects —
-  effects belong ON beat timestamps, not at arbitrary times.
-- `plan_edit.py` overrides: `--exclude '1,6,0-30'`, `--lead '2:18,5'`,
-  `--pin '8=138,peak2=22'` — use them when the user dislikes a cut.
-- `plan_edit.py --beat-stride N` — cut density. 1 = a cut on every beat
-  (default); N>1 keeps every Nth beat: fewer, longer cuts that breathe, for
-  slow/contemplative footage. Naming convention for variants:
-  `<name>_beat-full` (stride 1) vs `<name>_beat-thinned` (stride 2+).
-- `plan_edit.py --full` uses the whole song instead of the best segment;
-  `--segment 2|3` picks the second/third-best highlight segment.
-- `render_edit.py --overunder` emits the stacked 960x1080 "3D" variant.
-
-## The white-flash montage template (separate edit style)
-
-When the user asks for a MONTAGE — a 1:1 sequence of held shots/stills with
-white-flash transitions ("white flash between each clip", "photo narrative",
-"meme montage") — use `flash_montage.py` instead of the beat pipeline:
-
-```
-python3 flash_montage.py --seq seq.json --audio <song> --out out.mp4 --flash 1.0
+```powershell
+$skillRoot = Split-Path -Parent '<absolute path to this SKILL.md>'
+$editPython = Join-Path $skillRoot '.venv/Scripts/python.exe'
+$editScripts = Join-Path $skillRoot 'scripts'
+# Only if the environment does not exist:
+python -m venv (Join-Path $skillRoot '.venv')
+& $editPython -m pip install -r (Join-Path $skillRoot 'requirements.txt')
 ```
 
-Author the seq.json yourself from the user's description: one item per shot,
-`{"video": path, "start": t, "dur": d}` or `{"image": path, "dur": d}`, with
-`zoom`/`cx`/`cy` to punch in on each subject (LOOK at a frame first to place
-cx/cy), `stretch` for width hits, `motion: "sway"` for handheld feel (default
-on stills, off for videos). Set `dur` to a beat-multiple of the song's tempo
-(from beat_map.py) so flashes land musically — e.g. 4 beats per slot. Iterate
-by editing the seq.json, not by rebuilding commands.
+Use `-X utf8` for Python commands. On Linux/macOS create the environment with
+`python3 -m venv` and use `.venv/bin/python`. FFmpeg and ffprobe must be on PATH.
+`requirements.lock.txt` is the tested Windows/Python 3.12 snapshot;
+`requirements.txt` is the portable dependency specification.
 
-## What the user can ask for (translate words → workflow)
+Keep analysis, persistent ZIP imports, project JSON, tracking/render caches and
+previews in the current project's `work/`; final MP4s go to `outputs/` unless the
+user chooses another location. Pass absolute paths. Do not put media in the
+skill installation. An unset `NUMBA_CACHE_DIR` defaults to temporary storage;
+set it under work when a persistent cache is useful.
 
-- "punchier / more cuts" → `--beat-stride 1` (default), or lower clip_tag
-  `--threshold` for finer scenes
-- "calmer / spaced out / longer scenes / let shots breathe" →
-  `--beat-stride 2` (or 4 for very slow footage); when comparing, render both
-  and suffix the outputs `_beat-full` / `_beat-thinned`
-- "start on the best moment" → `--lead` with the highest-energy clip
-- "make it vertical / TikTok-ready / 9:16" → vertical_style.py after render;
-  "square / 1:1" → center-crop with ffmpeg (`crop=ih:ih,setsar=1` + scale);
-  "stacked / over-under" → `render_edit.py --overunder`
-- **Reference videos — take ONLY what the user asks for.** A reference is not
-  a request to clone the whole look. Extract 3-5 frames
-  (`ffmpeg -ss <t> -frames:v 1`), LOOK at them, then match just the named
-  aspect(s): "this tint" → hue/cast only (`hue`, `colorbalance`); "this
-  contrast" → `curves`/`eq` only; "how washed out it is" → saturation only;
-  "the way it cuts" → cut rhythm/density, not color at all; "that flash
-  effect" → just that effect from the cookbook. If they say "make it look
-  like this" without naming an aspect, ASK which parts they mean (color?
-  contrast? pacing? effects?) before matching more than one. Show a
-  confirmation frame before final render. If the reference is on the web and
-  Chrome tools are available, study it there the same way.
+## Choose the workflow
 
-## Effects cookbook (apply with ffmpeg per segment, then re-concat)
+For new work, use **scripts/edit_project.py**. Select the planner from the task:
 
-Apply to individual extracted segments between the extract and concat steps
-(re-encode the segment with `-vf "<filter>"`), or to the final file. Time
-effects to beat timestamps from the beatmap.
-
-| User says | ffmpeg filter |
+| Task | Read and use |
 |---|---|
-| white flash (on the beat/drop) | `fade=t=in:st=0:d=0.07:color=white` on the segment starting at that beat |
-| black dip | `fade=t=in:st=0:d=0.07:color=black` |
-| stretch / punch-in | `scale=iw*1.15:ih*1.15,crop=iw/1.15:ih/1.15,setsar=1` (hold ~2 frames, then normal) |
-| horizontal stretch hit | `scale=iw*1.25:ih,crop=iw/1.25:ih,setsar=1` |
-| hue shift / psychedelic | static: `hue=h=60` · animated: `hue=h='mod(t*180,360)'` |
-| RGB split / glitch | `rgbashift=rh=6:bh=-6` |
-| speed ramp | `setpts=0.5*PTS` (2x) · `setpts=2*PTS` (half speed; add `minterpolate` for smoothness) |
-| shake | `crop=iw-20:ih-20:'10+8*sin(t*40)':'10+8*cos(t*37)'` |
-| strobe invert | `negate=enable='lt(mod(t,0.25),0.04)'` |
-| dreamy glow | `gblur=sigma=8,blend=all_mode=screen,all_opacity=0.35` (via split) |
-| grade: warm | `colorbalance=rm=.12:bm=-.08` · cool: `colorbalance=bm=.12:rm=-.06` |
+| Music montage or action edit | [project workflow](references/project-workflow.md): analyze, music, plan, preview, revise, render. |
+| Interview, lesson, podcast or speech short | [speech workflow](references/speech-workflow.md): transcript-led selection, correctable words, preserved speech and B-roll. |
+| Local animated titles/cards/charts or supplied Remotion composition | [workflow extensions](references/workflow-extensions.md): editable graphic layers, local motion assets and optional Remotion rendering. |
+| Original sound + voice + music + SFX | [audio workflow](references/audio-workflow.md): gains, fades, ducking, measured normalization and music arrangement. |
+| Improve selection, correct musical structure, evaluate edits | [music and editorial review](references/music-editorial.md): confidence, phrase flow, preferences, alternatives, feedback and held-out calibration. |
+| Captions/titles in an existing edit | [text and subtitles](references/text-and-subtitles.md); use the speech reference for source-bound words/translations. |
+| Tracking correction, style, export QA, dry run or batch work | [workflow extensions](references/workflow-extensions.md). |
 
-Rules of thumb: flashes/punches on energy PEAKS only (over-flashing reads
-amateur); one signature effect per edit + one grade; always `-pix_fmt yuv420p`
-and `setsar=1` when re-encoding segments so concat stays valid.
+A speech project should be planned around complete thoughts and audible original
+speech. A music project should be planned around its measured pulse or phrases.
+Graphic compositions use authored timing. Do not substitute one for the other.
 
-## Workflow when the user asks for an edit
+1. Analyze the supplied media and, when relevant, selected music. For speech,
+   start with transcript analysis; authored motion graphics need no soundtrack.
+2. View contact sheets and relevant source frames. Annotate objects, shot sizes,
+   meaningful action times and subject boxes using observed evidence. Apply the
+   annotations to the library before planning a content-aware edit.
+3. Plan with the requested duration, format, pace and creative style. Inspect
+   explanations, alternatives, music hypotheses or transcript ranges. Presets are starting points;
+   explicit user preferences override their effects and color settings.
+4. Render a preview, inspect the framing and action/beat alignment, and apply
+   targeted revisions to the saved project. Generate a final render when the
+   requested result is ready; no extra approval is implied by the preview step.
+5. Check the exported file with export QA, inspect representative frames and
+   listen to speech/music transitions. Use tracking diagnostics to locate low
+   confidence intervals. Deliver the MP4 and state anything not actually checked.
 
-1. Run beat_map + clip_tag (with `--thumbs`; view the contact sheet to know
-   the footage).
-2. plan_edit → review the EDL against their description; apply overrides.
-3. render_edit → if effects were requested, re-extract the affected segments
-   with filters at the right beats, re-concat, re-mux audio.
-4. Optional vertical_style for 9:16. Deliver the file path + one-line summary
-   of cut count, duration, and effects used.
+For titles, captions, SRT/VTT files or automatic subtitles, read
+[text-and-subtitles.md](references/text-and-subtitles.md). Add text to the saved
+project, preview it and correct wording/timing before export. Use local speech
+recognition only for audio that belongs in the requested edit; review its output.
+The optional speech requirements and model are separate from the base install.
+Check for supplied transcripts before running ASR. Corrections and imported
+translations preserve stable word IDs; do not present translation timing as
+measured speech alignment. Text-only revisions preserve cached shots.
+
+## Playback speed rule
+
+Do not slow video by default. Keep the effective playback speed at least 1x
+throughout every shot, including speed ramps, action anchors and revisions.
+"Cinematic", "smooth", "on the beat", a preset, high-FPS footage or a shortage
+of footage is not permission to slow it down.
+
+Slow motion is allowed only when the user's prompt directly requests it, and
+only with motion-compensated frame interpolation. Record the exact request in
+`--slow-motion-prompt` and select `--interpolation optical_flow`; never invent
+that quote or enable these settings proactively. Plain timestamp stretching,
+lowering playback FPS, duplicated frames and simple frame blending are not
+acceptable substitutes. If interpolation fails, stop that render and explain
+the failure; do not fall back to ordinary slowdown. See
+[project-workflow.md](references/project-workflow.md) for the explicit opt-in.
+
+Duration is exact to one output frame. Source footage is not repeated unless
+allowed. Resolve shortages using additional unused footage, permitted photo
+holds, or an explicitly changed duration/repeat constraint. Do not silently
+slow or truncate the edit to meet its duration. Existing projects receive the
+same checks; an old slow-motion setting is not evidence of a user request.
+
+Automatic beat/energy analysis estimates musical structure. A weak pulse uses
+`phrase_flow`; do not fabricate a tempo grid and call it detected beat alignment.
+Use manual music overrides after listening when the estimates are wrong.
+Automatic tracking uses face/motion cues or a selected subject box; check that
+it follows the intended object. Requested slow motion uses optical-flow frame
+interpolation; inspect moving edges and occlusions for artifacts. These features
+do not replace editorial inspection or create missing scenes. Use source-bound
+word/action/shot/beat/event anchors for overlays and sounds that must survive
+revisions. Record accepted/rejected source moments only after reviewing them;
+never fabricate user feedback to improve a score.
+
+For repeated evaluation use the real-media manifest workflow. Synthetic fixtures
+verify mechanics, not real-world tracking identity, ASR accuracy or editorial
+quality. A missing or unreviewed case remains unverified. Do not promise virality.
+
+## Existing projects and specialized effects
+
+For a saved version-2 project, inspect it and use `revise`, `preview`, `render`;
+preserve stable shot IDs and the recoverable history. Avoid regenerating the
+entire plan for a local change such as replacing one shot or removing flashes.
+
+For the original JSON EDL pipeline, square white-flash photo montages, custom
+FFmpeg effects, or legacy command flags, read
+[legacy-workflow.md](references/legacy-workflow.md). The original CLIs remain
+available. Use the project workflow when exact duration and reusable revisions
+are required.
+
+For a reference video, match only the requested aspects (rhythm, color, framing,
+effects). If the user's intended aspects are unclear, ask before applying a
+whole look. Preserve proportions and natural color unless requested otherwise.

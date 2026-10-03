@@ -2,8 +2,8 @@
 
 [English README](../README.md) · [Русский README](../README.ru.md) · [Русская версия](capabilities.ru.md)
 
-This is the capability reference for **Net2Fox's Codex fork** of `beat-synced-edit`.
-The main workflow is a persistent editing project controlled through Codex or
+This is the capability reference for **Net2Fox's fork** of `beat-synced-edit`.
+The main workflow is a persistent editing project controlled through Codex, Claude Code or
 `edit_project.py`. Separate legacy tools are described below; their effects are
 not all switches in the project renderer.
 
@@ -33,8 +33,9 @@ subjects when the source footage and directions are supplied.
   Recognized image extensions: JPG/JPEG, PNG, WebP, BMP and TIF/TIFF. Actual video
   decoding still depends on the local FFmpeg/OpenCV build and source codec.
 - Use a separate local audio file as the soundtrack; common formats such as MP3,
-  WAV and FLAC depend on the installed audio decoders. Clip audio is not mixed
-  into the soundtrack by the project renderer.
+  WAV and FLAC depend on the installed audio decoders. Audio-mix settings can
+  preserve source sound and combine voice, music and effects; speech projects
+  preserve their original speech by default.
 - Detect scene boundaries, sample frames and produce paginated contact sheets,
   representative thumbnails and initial frames for subject selection.
 - Measure motion, brightness and visual similarity; use stable asset/clip IDs
@@ -56,7 +57,7 @@ guarantee that every selected shot tells the intended story.
 
 | Capability | How it works / control |
 |---|---|
-| Beat and tempo analysis | Detect beats, estimate tempo, measure energy, locate energy peaks/valleys and suggest high-energy excerpts. |
+| Beat and tempo analysis | Beats, onset density, energy phases, silence/hard stops, phrase/event hypotheses, pulse confidence and energetic excerpts. |
 | Soundtrack excerpt | Start from a suggested excerpt or set an exact `--audio-start` in seconds. |
 | Musical structure | Estimate `intro`, `build`, `drop`, `outro` sections; provide explicit section ranges when the estimate misses the intended structure. |
 | Cut density | Change every section with `--beat-stride`, or one section with repeated `--section-stride NAME=N` options. A stride of 1 targets every beat; larger values produce fewer cuts. |
@@ -65,10 +66,11 @@ guarantee that every selected shot tells the intended story.
 | Exact final duration | Plan in output frames: 25 seconds at 30 fps is 750 frames. Other requested durations are rounded to the nearest output frame. |
 | Footage shortages | Use unused source ranges or permitted photo holds; fail when constraints cannot be met. Reuse video only when explicitly allowed. No hidden slow motion or early finish to fill a shortage. |
 
-Beat and section detection are estimates. In unmetered audio or a range without
-detected beats, the planner may use a tempo-grid fallback and records that fact.
-Review the actual drop and cut rhythm; a successful analysis is not proof of
-musical alignment.
+Beat and section detection are estimates. `--pacing-mode auto` chooses beat cuts
+when onset evidence supports them, otherwise longer phrase/event-driven holds.
+No measured beats means no invented beat grid. `music-override` accepts bounded
+manual beats/events/phrases plus a reason and retains an audit trail. Review the
+actual music; successful analysis is not proof of musical alignment.
 
 ## Presets and built-in picture effects
 
@@ -107,7 +109,7 @@ automatic consequences of asking for a preset.
 |---|---|
 | `auto` | Follow a selected initial subject box; without a box, use face/motion cues. Smooth the crop path. |
 | `center` | Fixed central crop that fills the requested frame. |
-| `manual` | Fixed framing around the selected subject region. |
+| `manual` | Fixed subject framing or authored source-time camera keyframes. |
 | `contain` | Keep the complete image within the output, adding bars as needed. |
 
 Tracking is visual tracking, not identity recognition. Occlusion, cuts, fast
@@ -119,6 +121,8 @@ the original frame.
 Speed ramps use smooth changes in source-time progression, optionally with an
 action anchor. Point values are relative weights, not literal playback speeds;
 the selected source span and output duration determine the actual speed.
+Automatic build/drop ramps now reserve additional unused footage so their slowest
+point remains 1×. Without a surplus, constant-speed shots preserve exact duration.
 
 **Video is never slowed by default.** The effective speed must stay at least
 1× throughout every shot, including ramps, anchored actions and revisions.
@@ -172,8 +176,10 @@ Important behavior:
 - Recognition is not verified transcription or reliable lyric alignment. Check
   names, language, timing and sung words, especially over music. It does not add
   translation, speaker diarization or synthesized voice-over.
-- Titles/captions stay at absolute output times when picture shots are reordered
-  or retimed. Shift them explicitly if their relationship to the audio changes.
+- Output-timed titles/captions stay fixed during picture revisions. Speech-mode
+  captions are bound to stable source words and remapped through trims, nonlinear
+  speed and reorder. Word/shot/source/action/beat/event anchors can also bind
+  graphics and audio to meaningful events.
 - Text-only changes preserve the base-shot cache and soundtrack. The text layer
   is composited after picture assembly.
 
@@ -243,11 +249,51 @@ See [legacy workflow](../skills/beat-sync-edit/references/legacy-workflow.md).
 > interpolation. Keep the rest at normal speed or faster and inspect the edges
 > around the moving subject.
 
+## Extended project workflows
+
+- **Speech-first montage:** import existing SRT/VTT or word-timed JSON before
+  optional ASR; select phrase candidates, preserve requested pauses and place
+  B-roll over continuous original speech. Correct stable word/segment IDs, apply
+  supplied terminology and import translated/bilingual captions. Energy-gap
+  review flags suspicious omissions without pretending noise is recognized
+  speech. Repeated recordings can share the same loaded model configuration.
+- **Audio:** preserve or mute source sound, add voice/music/SFX, set gain/fades,
+  duck music under speech, normalize and measure the encoded result. Optional
+  beat-grid/bar arrangement verifies source/output placement and regenerates
+  the map; grid accuracy still requires listening.
+- **Selection:** per-shot score components, source evidence and alternatives;
+  reviewed query terms and explicit preference weights affect planning. Audited
+  accept/reject/clear decisions persist. Calibration splits independent sources
+  before training and reports held-out metrics and a baseline. It produces no
+  model for insufficient data and makes no virality claim.
+- **Graphics:** reusable styles, safe text zones and character-coverage
+  diagnostics; local animated cards, counters, progress bars and image/text
+  layers. A motion specification can render a reusable MP4. The optional
+  Remotion adapter exports editable React and uses locally installed dependencies
+  when rendering is requested; no cloud media generation is included.
+- **Tracking:** source-time path/confidence reports highlight intervals for
+  inspection; manual camera keyframes correct errors. Confidence is a diagnostic,
+  not recognition of a particular person or vehicle.
+- **Execution and export:** structured JSON results/errors, dry runs, input-bound
+  plans, provenance, batch analysis/render with shared caches. Export QA decodes
+  media, measures audio and black/silent intervals, and writes review frames.
+  Intentional black/silence ranges are explicit rather than silently ignored.
+- **Real-media evaluation:** reusable source/project-hashed cases for multiple
+  subjects, occlusions/fast motion, quiet speech, names/languages, variable FPS and
+  ambiguous music. Missed and false selections are evaluated against supplied
+  labels. Missing or unreviewed cases do not pass. Synthetic tests establish
+  deterministic mechanics, not artistic quality or real ASR/tracking accuracy.
+
+Commands and examples: [speech](../skills/beat-sync-edit/references/speech-workflow.md),
+[audio](../skills/beat-sync-edit/references/audio-workflow.md),
+[music/editorial](../skills/beat-sync-edit/references/music-editorial.md),
+[graphics/QA/batch](../skills/beat-sync-edit/references/workflow-extensions.md).
+
 ## Boundaries
 
 This repository does not include footage/music generation, automatic media
-search/download, TTS, automatic translation, source-audio/voice-over mixing,
-speaker identification, a full nonlinear editor, arbitrary animated graphics,
+search/download, TTS, automatic translation,
+speaker identification, a full nonlinear editor,
 or automatic posting to social platforms. It does not export a native Premiere,
 DaVinci Resolve or CapCut project. References can guide a requested aspect such
 as pacing or color after inspection; there is no automatic one-click style clone.

@@ -57,6 +57,8 @@ Apply observations without decoding sources again:
 
 You can also re-run `analyze` with `--annotations`. Keep the same input list when
 re-running; otherwise omitted assets will leave the library.
+Measured analysis and thumbnails are cached by source content and analyzer
+identity; annotations are applied afresh. Each clip records sample-time evidence.
 
 ## Plan
 
@@ -76,13 +78,19 @@ require a shorter remainder). `--grade none` preserves natural color;
 omits named clips. Speed limits use `--min-speed`/`--max-speed`; the default
 minimum is 1x. Presets cannot authorize slow motion.
 
-The plan contains frame-based timing, intro/build/drop/outro sections, selected
-source ranges and per-shot effects. Music structure is estimated from beats and
-energy; it is editable, not a claim to recognize musical form perfectly. Inspect
+The plan contains frame-based timing, musical sections, selected source ranges,
+per-shot explanations/alternatives and effects. `--pacing-mode auto` uses beat
+cuts for supported pulse and phrase-flow holds otherwise. Phrase flow uses a
+`flow` section instead of inventing intro/build/drop/outro semantics. Inspect
 the selected audio start and section boundaries. `--audio-start` sets a specific
 start in seconds; `--sections` accepts a JSON array of `{name, start, end}`
 records in output seconds (or `start_frame`, `end_frame`). Names are `intro`,
 `build`, `drop`, `outro`; sections must cover the whole output contiguously.
+For manual beat/event/phrase corrections, confidence, query/preferences and
+reviewed accept/reject decisions, read [music-editorial.md](music-editorial.md).
+Build/drop acceleration curves now allocate extra unique source ranges while
+reserving enough footage for the rest of the output; they do not normalize a
+variable curve into accidental slow motion.
 
 ```json
 [

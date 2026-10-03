@@ -109,6 +109,16 @@ with white text, black outline and a translucent caption box. They are starting
 points, not guarantees about every TikTok/Shorts UI overlay. Inspect the export
 at representative times and shorten crowded captions when needed.
 
+## Source-bound speech captions
+
+The commands in this reference primarily address output-timed text in an
+existing montage. For speech-led editing use [speech-workflow.md](speech-workflow.md):
+import words/segments once, correct stable IDs, add supplied translations and
+map captions through source trims, speed and reorder. These source-bound captions
+move with speech. Output-timed text retains its original placement unless edited.
+Use [audio-workflow.md](audio-workflow.md) to add a separate recording as audible
+voice or source sound; choosing an ASR input alone does not add an audio track.
+
 ## Correct text and timing
 
 The preview review page includes a text selector, text field and start/end

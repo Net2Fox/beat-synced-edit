@@ -6,6 +6,7 @@ The automatic pass measures image properties; it does not guess object labels.
 """
 
 import argparse
+from copy import deepcopy
 import hashlib
 import json
 import math
@@ -219,12 +220,17 @@ def _clips_for_asset(asset, thumb_dir):
             subject_image.save(subject_thumb, quality=90)
             metrics = _analyze_frames(frames)
             clips.append({"id": clip_id, "asset_id": asset["id"], "source": source, "kind": asset["kind"],
+                          "source_sha256": asset.get("sha256"),
                           "start": round(start, 6), "end": round(end, 6), "duration": round(end - start, 6),
                           **metrics, "tags": [], "shot_type": "unknown", "subject": None,
                           "semantic_source": "unannotated", "thumb": str(thumb.resolve()),
                           "thumb_time": round(sampled_times[len(frames) // 2], 6),
                           "subject_thumb": str(subject_thumb.resolve()),
                           "subject_thumb_time": round(sampled_times[0], 6)})
+            clips[-1]["measurement_evidence"] = {"method": "sampled-gray-difference-and-brightness",
+                                                  "sample_times": [round(float(t), 6) for t in sampled_times],
+                                                  "sample_count": len(frames),
+                                                  "limitation": "Sparse samples measure changes, not semantic action or identity"}
     finally:
         if capture is not None:
             capture.release()
@@ -253,7 +259,7 @@ def apply_annotations(clips, annotations):
     unknown = set(records) - set(known)
     if unknown:
         raise ValueError(f"Unknown annotation clip ids: {sorted(unknown)}")
-    allowed = {"tags", "shot_type", "subject", "action_time", "exclude", "notes", "quality"}
+    allowed = {"tags", "shot_type", "subject", "action_time", "exclude", "notes", "quality", "annotation_evidence"}
     for clip_id, values in records.items():
         if not isinstance(values, dict) or set(values) - allowed:
             raise ValueError(f"Invalid annotation fields for {clip_id}; allowed: {sorted(allowed)}")
@@ -274,6 +280,14 @@ def apply_annotations(clips, annotations):
             raise ValueError(f"notes must be a string: {clip_id}")
         if "quality" in values and (isinstance(values["quality"], bool) or not isinstance(values["quality"], (int, float)) or not 0 <= values["quality"] <= 1):
             raise ValueError(f"quality must be a number between zero and one: {clip_id}")
+        if "annotation_evidence" in values:
+            evidence = values["annotation_evidence"]
+            if not isinstance(evidence, dict) or set(evidence) - {"reviewer", "notes", "frames", "confidence"}:
+                raise ValueError("annotation_evidence allows reviewer, notes, frames and confidence")
+            if "confidence" in evidence and (isinstance(evidence["confidence"], bool) or not isinstance(evidence["confidence"], (int, float)) or not 0 <= evidence["confidence"] <= 1):
+                raise ValueError("annotation confidence must be in 0..1")
+            if "frames" in evidence and (not isinstance(evidence["frames"], list) or any(isinstance(t, bool) or not isinstance(t, (int, float)) or not math.isfinite(t) or not clip["start"] <= t <= clip["end"] for t in evidence["frames"])):
+                raise ValueError("annotation frames must be source times within the clip")
         clip.update(values)
         clip["semantic_source"] = "annotation"
     return clips
@@ -316,21 +330,72 @@ def _contact_sheets(clips, work):
     return files
 
 
-def analyze_library(inputs, work_dir, annotations_path=None):
+def _cached_analysis(source, cache):
+    """Cache only measured metadata; annotations are deliberately never cached."""
+    from importlib.metadata import version, PackageNotFoundError
+    from project_workspace import write_json
+    libraries = {}
+    for name in ("opencv-python", "numpy", "Pillow", "scenedetect"):
+        try:
+            libraries[name] = version(name)
+        except PackageNotFoundError:
+            libraries[name] = "unknown"
+    digest = _hash_file(source)
+    identity = {"source_sha256": digest, "analyzer_sha256": _hash_file(__file__), "libraries": libraries}
+    key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+    directory = cache / key
+    metadata = directory / "analysis.json"
+    record = None
+    if metadata.is_file():
+        try:
+            candidate = json.loads(metadata.read_text(encoding="utf-8"))
+            if candidate.get("identity") == identity and candidate.get("clips") and all(
+                    Path(path).is_file() and _hash_file(path) == checksum for path, checksum in candidate.get("thumbnails", {}).items()):
+                required = {clip[field] for clip in candidate["clips"] for field in ("thumb", "subject_thumb")}
+                if required <= set(candidate.get("thumbnails", {})):
+                    record = candidate
+        except (OSError, ValueError, KeyError, TypeError):
+            record = None
+    hit = record is not None
+    if record is None:
+        directory.mkdir(parents=True, exist_ok=True)
+        asset = probe_media(source)
+        asset["sha256"] = digest
+        clips = _clips_for_asset(asset, directory)
+        thumbnails = {clip[field]: _hash_file(clip[field]) for clip in clips for field in ("thumb", "subject_thumb")}
+        record = {"identity": identity, "asset": asset, "clips": clips, "thumbnails": thumbnails}
+        write_json(metadata, record)
+    asset, clips = deepcopy(record["asset"]), deepcopy(record["clips"])
+    current_path = str(Path(source).resolve())
+    current_id = "asset_" + hashlib.sha256(os.path.normcase(current_path).encode("utf-8")).hexdigest()[:12]
+    asset.update(id=current_id, path=current_path, sha256=digest)
+    for index, clip in enumerate(clips):
+        clip.update(id=f"{current_id}:{index:04d}", asset_id=current_id, source=current_path, source_sha256=digest)
+    return asset, clips, hit
+
+
+def analyze_library(inputs, work_dir, annotations_path=None, cache_dir=None):
     work = Path(work_dir).expanduser().resolve()
-    thumb_dir = work / "thumbnails"
-    thumb_dir.mkdir(parents=True, exist_ok=True)
+    work.mkdir(parents=True, exist_ok=True)
+    cache = Path(cache_dir).resolve() if cache_dir else work / "analysis-cache"
+    cache.mkdir(parents=True, exist_ok=True)
     files = discover_media(inputs, work)
-    assets = [probe_media(path) for path in files]
-    clips = []
-    for asset in assets:
-        clips.extend(_clips_for_asset(asset, thumb_dir))
+    files = [path for path in files if not path.resolve().is_relative_to(cache)]
+    if not files:
+        raise ValueError("No source media remain outside the analysis cache")
+    assets, clips, cache_hits = [], [], 0
+    for path in files:
+        asset, measured, hit = _cached_analysis(path, cache)
+        assets.append(asset)
+        clips.extend(measured)
+        cache_hits += int(hit)
     if annotations_path is not None:
         with Path(annotations_path).open(encoding="utf-8-sig") as source:
             annotations = json.load(source)
         apply_annotations(clips, annotations)
     sheets = _contact_sheets(clips, work)
     result = {"schema_version": 2, "assets": assets, "clips": clips,
+              "analysis_cache": {"directory": str(cache), "hits": cache_hits, "misses": len(assets)-cache_hits},
               "contact_sheet": sheets[0], "contact_sheets": sheets,
               "semantic_review": "complete" if all(clip["semantic_source"] == "annotation" for clip in clips) else "needed"}
     (work / "library.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

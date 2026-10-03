@@ -17,7 +17,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 STYLE_KEYS = {"font", "font_size", "color", "highlight_color", "background",
               "stroke_color", "stroke_width", "position", "align", "max_width",
-              "margin", "max_lines", "opacity", "animation", "fade_frames", "highlight"}
+              "margin", "max_lines", "opacity", "animation", "fade_frames", "highlight", "safe_area"}
 
 
 def _number(value, label, minimum, maximum=None, integer=False):
@@ -58,6 +58,9 @@ def _style(value, label):
             _number(value[key], f"{label}.{key}", low, high, integer)
     if "highlight" in value and not isinstance(value["highlight"], bool):
         raise ValueError(f"{label}.highlight must be a boolean")
+    if "safe_area" in value:
+        from graphics_layers import validate_safe_area
+        validate_safe_area(value["safe_area"])
     if "font" in value:
         font = value["font"]
         if not isinstance(font, str) or not Path(font).is_absolute() or not Path(font).is_file():
@@ -171,8 +174,11 @@ class _Cue:
         self.fade = min((self.end-self.start)//2, int(style.get("fade_frames", max(1, round(fps*.15)))))
         self.height = height
         margin = style["margin"]
-        safe_width = max(1, math.floor(width*min(style["max_width"], 1-2*margin)))
-        safe_height = max(1, math.floor(height*(1-2*margin)))
+        area = style.get("safe_area", {})
+        left, right, top, bottom = (max(margin, area.get(k, 0)) for k in ("left", "right", "top", "bottom"))
+        self.safe_bottom = bottom
+        safe_width = max(1, math.floor(width*min(style["max_width"], 1-left-right)))
+        safe_height = max(1, math.floor(height*(1-top-bottom)))
         font_path = _font_path(style.get("font"))
         initial_size = max(1, round(style["font_size"]*scale))
         stroke = max(0, round(style["stroke_width"]*scale))
@@ -207,11 +213,11 @@ class _Cue:
             draw.text((x, y), content, font=font, anchor="lt", fill=_color(style["color"], "color"),
                       stroke_width=stroke, stroke_fill=_color(style["stroke_color"], "stroke_color"))
             self.lines.append((chars, content, x, y))
-        self.x = {"left": round(width*margin), "center": (width-self.width)//2,
-                  "right": round(width*(1-margin))-self.width}[style["align"]]
-        self.y = {"top": round(height*margin), "center": (height-self.h)//2,
-                  "bottom": min(round(height*.82-self.h/2), math.floor(height*(1-margin))-self.h)}[style["position"]]
-        self.y = max(math.ceil(height*margin), min(self.y, math.floor(height*(1-margin))-self.h))
+        self.x = {"left": math.ceil(width*left), "center": round(width*left+(width*(1-left-right)-self.width)/2),
+                  "right": math.floor(width*(1-right))-self.width}[style["align"]]
+        self.y = {"top": math.ceil(height*top), "center": round(height*top+(height*(1-top-bottom)-self.h)/2),
+                  "bottom": min(round(height*.82-self.h/2), math.floor(height*(1-bottom))-self.h)}[style["position"]]
+        self.y = max(math.ceil(height*top), min(self.y, math.floor(height*(1-bottom))-self.h))
         self.words, cursor = [], 0
         for word in cue.get("words", []):
             text = word["text"].strip()
@@ -255,7 +261,7 @@ class _Cue:
             result.putalpha(result.getchannel("A").point(lambda value: round(value*alpha)))
         dy = round(self.height*.025*(1-progress)) if self.style["animation"] == "slide" and animated else 0
         # Slide motion stays inside the safe area even for bottom-aligned text.
-        bottom_limit = math.floor(self.height*(1-self.style["margin"]))-self.h
+        bottom_limit = math.floor(self.height*(1-self.safe_bottom))-self.h
         return result, self.x, min(self.y+dy, bottom_limit)
 
 
