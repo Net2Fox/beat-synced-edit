@@ -1,6 +1,7 @@
 # Legacy pipeline and custom effects
 
-Use the skill root/interpreter and work/output paths established in SKILL.md.
+Use the `edit` launcher and work/output paths established in SKILL.md; legacy
+scripts run through `edit tool NAME.py ...` with the skill's environment.
 The playback-speed rule in SKILL.md applies to every legacy/custom FFmpeg
 workflow too. Do not slow footage by default. For explicitly requested slow
 motion, use the project workflow with the recorded prompt and optical-flow
@@ -9,12 +10,12 @@ The legacy planner can finish early; prefer the project workflow for exact durat
 
 ## The pipeline (run in order)
 
-```powershell
-& $editPython -X utf8 "$editScripts/beat_map.py" $song -o "$work/beatmap.json"
-& $editPython -X utf8 "$editScripts/clip_tag.py" $footage --thumbs -o "$work/clips.json"
-& $editPython -X utf8 "$editScripts/plan_edit.py" "$work/beatmap.json" "$work/clips.json" -o "$work/edit.json"
-& $editPython -X utf8 "$editScripts/render_edit.py" "$work/edit.json" -a $song -v $footage -o "$work/cut.mp4"
-& $editPython -X utf8 "$editScripts/vertical_style.py" "$work/cut.mp4" --fit cover --grade none --size 1080x1920 -o "$outputs/edit.mp4"
+```sh
+edit tool beat_map.py "$song" -o "$work/beatmap.json"
+edit tool clip_tag.py "$footage" --thumbs -o "$work/clips.json"
+edit tool plan_edit.py "$work/beatmap.json" "$work/clips.json" -o "$work/edit.json"
+edit tool render_edit.py "$work/edit.json" -a "$song" -v "$footage" -o "$work/cut.mp4"
+edit tool vertical_style.py "$work/cut.mp4" --fit cover --grade none --size 1080x1920 -o "$out/edit.mp4"
 ```
 
 - `--fit cover --grade none` preserves proportions and color when only vertical
@@ -53,8 +54,8 @@ When the user asks for a MONTAGE — a 1:1 sequence of held shots/stills with
 white-flash transitions ("white flash between each clip", "photo narrative",
 "meme montage") — use `flash_montage.py` instead of the beat pipeline:
 
-```powershell
-& $editPython -X utf8 "$editScripts/flash_montage.py" --seq "$work/seq.json" --audio $song --out "$outputs/montage.mp4" --flash 1.0
+```sh
+edit tool flash_montage.py --seq "$work/seq.json" --audio "$song" --out "$out/montage.mp4" --flash 1.0
 ```
 
 Author the seq.json yourself from the user's description: one item per shot,
@@ -89,6 +90,13 @@ by editing the seq.json, not by rebuilding commands.
   Chrome tools are available, study it there the same way.
 
 ## Effects cookbook (apply with ffmpeg per segment, then re-concat)
+
+The project workflow now covers flashes, black dips, invert hits, RGB split,
+glitch, stretch, blur-in, whip transitions, beat pulses, shake, punch-ins,
+vignette, grain, glow, letterbox and ten grades as revisable, cached effects;
+see [effects-and-looks.md](effects-and-looks.md). Prefer those. Use this
+cookbook only for the legacy pipeline or for a look the catalog lacks (hue
+cycling, strobe, custom curves).
 
 Apply to individual extracted segments between the extract and concat steps
 (re-encode the segment with `-vf "<filter>"`), or to the final file. Time

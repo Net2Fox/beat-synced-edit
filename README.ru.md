@@ -25,7 +25,7 @@
 | Подбор кадров по содержанию | Проверенные аннотации, объяснение оценок и альтернативы, запрос и предпочтения, история принятых/отклонённых кадров и калибровка на отдельных проверочных исходниках. |
 | Кадрирование | Любой формат; диагностика трекинга, ручные ключевые кадры камеры, фиксированный кроп и вписывание с полями. |
 | Графика | Сохраняемые стили и безопасные зоны текста, локальные карточки/счётчики/слои и необязательный адаптер Remotion. |
-| Стилизация и акценты | Четыре настраиваемых пресета, цветокоррекция, короткие зумы, вспышки, тряска и движение фотографий. |
+| Стилизация и акценты | Семь настраиваемых пресетов (в том числе phonk, anime/AMV, travel), десять цветокоррекций, вспышки, затемнения, глитч и RGB-сдвиг, растяжение, whip-переходы, пульсация под бит, тряска, виньетка, зерно, свечение, кинополосы и движение фотографий. |
 | Управление скоростью | По умолчанию — воспроизведение со скоростью не ниже 1×. Замедление только по прямому запросу, с интерполяцией по оптическому потоку. |
 | Текст | Анимированные титры, оформление субтитров, импорт/экспорт SRT/VTT и дополнительное локальное распознавание речи с подсветкой слов. |
 | Правки | Сохранение проекта, предпросмотр, замена и перестановка кадров, редактирование текста и повторное использование кеша неизменённых кадров. |
@@ -39,10 +39,9 @@
 
 - **Codex или Claude Code с доступом к локальным файлам и командам** — для монтажа через диалог.
   Для запуска только через CLI не нужны ни Codex, ни ключ OpenAI API.
-- **Рекомендуется Python 3.12.** Этот форк проверен на Windows с Python 3.12.
-  Ниже приведены и команды установки для macOS/Linux, но это не означает,
-  что все эти платформы протестированы. Для других версий Python нужны
-  совместимые версии зависимостей.
+- **Python 3.10+, рекомендуется 3.12.** Тесты прогонялись на Windows с
+  Python 3.12 и на Linux с Python 3.13 и FFmpeg 6.1. На macOS используются те же
+  команды, но в эти прогоны она не входила.
 - **FFmpeg и ffprobe в PATH**, с поддержкой кодирования H.264 (`libx264`) и AAC.
   Сборку для своей системы можно найти на
   [странице загрузки FFmpeg](https://ffmpeg.org/download.html).
@@ -59,9 +58,9 @@
 
 `skills/beat-sync-edit` — канонический пакет. `.claude/skills/beat-sync-edit` —
 полная синхронизированная копия для Claude Code в этом репозитории: те же
-инструкции, скрипты, справочники и лицензии. Для Claude Code укажите эту папку
-как `skillRoot` при настройке окружения ниже. Оба агента используют
-`edit_project.py`, а не разные поколения планировщика.
+инструкции, скрипты, справочники и лицензии. Для Claude Code используйте эту
+папку как папку скилла при настройке ниже. Оба агента вызывают `edit_project.py`
+через лаунчер `scripts/edit`, а не разные поколения планировщика.
 
 ### Попросите Codex установить скилл
 
@@ -70,8 +69,8 @@
 ```text
 $skill-installer Установи скилл из
 https://github.com/Net2Fox/beat-synced-edit/tree/main/skills/beat-sync-edit
-Создай .venv внутри установленной папки скилла, установи зависимости из requirements.txt
-и проверь доступность ffmpeg и ffprobe. Сообщи путь установки.
+Затем запусти его scripts/bootstrap.py: он создаст .venv, установит requirements.txt
+и проверит ffmpeg/ffprobe. Сообщи путь установки и результат bootstrap.
 ```
 
 Устанавливайте папку `skills/beat-sync-edit` **целиком**. При копировании только
@@ -82,7 +81,11 @@ Codex. См. [документацию OpenAI по скиллам](https://learn
 ### Ручная установка и настройка окружения
 
 Клонируйте репозиторий и скопируйте `skills/beat-sync-edit` в каталог скиллов,
-который обнаруживает ваша установка Codex. В текущей документации указаны
+который обнаруживает ваш агент. Для **Claude Code** это
+`~/.claude/skills/beat-sync-edit` (личный) или
+`<project>/.claude/skills/beat-sync-edit` (один проект); в клоне этого
+репозитория уже есть `.claude/skills/beat-sync-edit`. Для **Codex** в текущей
+документации указаны
 `~/.agents/skills/beat-sync-edit` для личного использования и
 `<project>/.agents/skills/beat-sync-edit` для одного репозитория. Некоторые
 встроенные установщики используют `$CODEX_HOME/skills` (обычно `~/.codex/skills`).
@@ -94,32 +97,21 @@ Codex. См. [документацию OpenAI по скиллам](https://learn
 git clone https://github.com/Net2Fox/beat-synced-edit.git
 ```
 
-Замените путь в примере ниже на фактическую папку установленного скилла.
-Окружение создаётся один раз; при обновлении используйте существующую `.venv`.
-
-**Windows / PowerShell**
-
-```powershell
-$skillRoot = 'C:/path/to/installed/beat-sync-edit'
-python -m venv (Join-Path $skillRoot '.venv')
-$editPython = Join-Path $skillRoot '.venv/Scripts/python.exe'
-& $editPython -m pip install -r (Join-Path $skillRoot 'requirements.txt')
-ffmpeg -version
-ffprobe -version
-& $editPython -X utf8 (Join-Path $skillRoot 'scripts/edit_project.py') --help
-```
-
-**macOS / Linux**
+Затем один раз создайте окружение любым Python 3.10+. Скрипт bootstrap
+использует только стандартную библиотеку, переиспользует исправную `.venv`,
+при необходимости ставит `requirements.txt` и проверяет FFmpeg, кодеки и шрифты:
 
 ```sh
-skillRoot='/path/to/installed/beat-sync-edit'
-python3 -m venv "$skillRoot/.venv"
-editPython="$skillRoot/.venv/bin/python"
-"$editPython" -m pip install -r "$skillRoot/requirements.txt"
-ffmpeg -version
-ffprobe -version
-"$editPython" -X utf8 "$skillRoot/scripts/edit_project.py" --help
+python3 /path/to/installed/beat-sync-edit/scripts/bootstrap.py        # macOS / Linux
+python  C:\path\to\installed\beat-sync-edit\scripts\bootstrap.py     # Windows
 ```
+
+Он печатает `READY` и путь к лаунчеру: `scripts/edit` (macOS/Linux) или
+`scripts\edit.cmd` (Windows). Лаунчер запускает CLI в окружении скилла:
+`scripts/edit doctor` повторяет проверку, `scripts/edit --help` выводит команды.
+Ручная настройка тоже работает: `python -m venv .venv` в папке скилла, затем
+`.venv/bin/python -m pip install -r requirements.txt`
+(`.venv\Scripts\python.exe` в Windows).
 
 Для установки совместимых с вашей системой зависимостей используйте
 `requirements.txt`. Файл `requirements.lock.txt` фиксирует проверенное базовое
@@ -128,17 +120,10 @@ ffprobe -version
 
 ### Автоматические субтитры — по желанию
 
-Попросите Codex установить `requirements-transcription.txt` в то же окружение
-или выполните:
-
-```powershell
-# PowerShell, с переменными из примера выше
-& $editPython -m pip install -r (Join-Path $skillRoot 'requirements-transcription.txt')
-```
+Попросите агента запустить bootstrap с `--transcription` или выполните сами:
 
 ```sh
-# macOS / Linux, с переменными из примера выше
-"$editPython" -m pip install -r "$skillRoot/requirements-transcription.txt"
+python3 /path/to/installed/beat-sync-edit/scripts/bootstrap.py --transcription
 ```
 
 Веса модели Whisper скачиваются при первом запуске. По умолчанию используется
@@ -147,21 +132,23 @@ ffprobe -version
 рядом с проектом, если другой путь не задан через `--model-dir`.
 Для `--local-files-only` модель уже должна быть в кеше или локальной папке.
 Распознавание обрабатывает звук локально и не отправляет его в сервис
-транскрибации. Сам Codex следует собственным настройкам обработки данных
+транскрибации. Сам агент следует собственным настройкам обработки данных
 моделью и инструментами. Для ручных титров и файлов SRT/VTT Whisper не нужен.
 
 ### Обновление существующей установки
 
-Сделайте резервную копию установленного скилла, затем попросите Codex обновить
-его файлы из этого форка, сохранив `.venv` и папки проектов с исходниками.
-После этого установите изменившиеся зависимости. Один лишь `git pull` в
+Сделайте резервную копию установленного скилла, затем попросите агента обновить
+его файлы из этого форка, сохранив `.venv` и папки проектов с исходниками, и
+снова запустите `scripts/bootstrap.py`, чтобы доустановить изменившиеся зависимости. Один лишь `git pull` в
 репозитории не обновляет отдельно скопированный скилл, а установщик может
 отказаться работать с уже существующей папкой назначения.
 
-## Использование в Codex
+## Использование в Claude Code или Codex
 
-Откройте локальную рабочую папку и укажите Codex пути к видео, фотографиям
-и музыке. Задайте длительность, соотношение сторон, желаемый стиль и моменты,
+Откройте локальную рабочую папку и укажите агенту пути к видео, фотографиям
+и музыке. В Claude Code скилл срабатывает по самому запросу (или через
+`/beat-sync-edit`); в Codex упомяните `$beat-sync-edit`. Задайте длительность,
+соотношение сторон, желаемый стиль и моменты,
 которые нужно включить или исключить. Храните рабочие файлы в `work/`,
 а готовые ролики — в `outputs/`, либо выберите свои папки.
 
@@ -176,6 +163,12 @@ ffprobe -version
 > Используй $beat-sync-edit. Добавь титр «Новое начало» на первые две секунды.
 > Распознай русскую речь в итоговой звуковой дорожке, сделай короткие субтитры
 > с тёмной подложкой и жёлтой подсветкой слов. Экспортируй MP4 и SRT.
+
+**Фан-эдит в стиле phonk**
+
+> Сделай phonk-эдит на 20 секунд из этих дрифт-клипов под этот трек, 9:16.
+> Глитч-переходы и тряска на дропе, мрачная цветокоррекция с зерном,
+> пульсация под бит, без замедления.
 
 **Правка готового монтажа**
 
@@ -199,7 +192,7 @@ ffprobe -version
 
 1. **Индексация материалов.** Проверка файлов, поиск сцен, оценка движения
    и яркости, создание листов с миниатюрами и сохранение распакованных ZIP.
-2. **Просмотр содержания.** Codex или монтажёр изучает исходные кадры и
+2. **Просмотр содержания.** Агент или монтажёр изучает исходные кадры и
    добавляет теги объектов, крупность планов и временные метки действий.
    Статистические характеристики изображения сами по себе не распознают
    объекты и не объясняют сюжет.
@@ -224,19 +217,24 @@ ffprobe -version
 
 ## Использование из командной строки
 
-Выполняйте эти примеры из корня клонированного репозитория. Здесь `python` —
-интерпретатор с установленными зависимостями проекта: например, `& $editPython`
-в PowerShell или `"$editPython"` в POSIX-оболочке после настройки выше.
-Замените пути к исходникам на свои. Если у вас только установленный скилл,
-вместо `edit_project.py` укажите абсолютный путь к его `scripts/edit_project.py`.
+Один раз выполните `python3 bootstrap.py` в корне клонированного репозитория,
+затем используйте там лаунчер `./edit` (`edit.cmd` в Windows). Если у вас только
+установленный скилл, укажите абсолютный путь к его `scripts/edit`.
+`./edit tool beat_map.py ...` запускает унаследованные вспомогательные скрипты
+в том же окружении.
 
 ```sh
-python -X utf8 edit_project.py analyze /path/to/footage --work work/library
-python -X utf8 edit_project.py music /path/to/song.wav --duration 25 -o work/beats.json
-python -X utf8 edit_project.py plan --library work/library/library.json --beats work/beats.json --duration 25 --preset cinematic --grade none --size 1080x1920 --fps 30 -o work/project.json
-python -X utf8 edit_project.py preview work/project.json -o work/preview.mp4
-python -X utf8 edit_project.py render work/project.json -o outputs/edit.mp4
+./edit analyze /path/to/footage --work work/library
+./edit music /path/to/song.wav --duration 25 -o work/beats.json
+./edit plan --library work/library/library.json --beats work/beats.json --duration 25 --preset phonk --effect grain=0.3 --size 1080x1920 --fps 30 -o work/project.json
+./edit preview work/project.json -o work/preview.mp4
+./edit render work/project.json -o outputs/edit.mp4
 ```
+
+Эффекты правятся в сохранённом проекте: `./edit effects` выводит каталог, а
+ревизия вроде `[{"op":"transition","section":"drop","type":"glitch","strength":0.7}]`,
+применённая через `./edit revise work/project.json --operations ops.json`,
+перерендеривает только затронутые кадры. См. [эффекты и стили](skills/beat-sync-edit/references/effects-and-looks.md).
 
 Для подбора кадров по содержанию изучите листы с миниатюрами и примените
 аннотации **до** команды `plan`; иначе выбор будет опираться на доступные
@@ -248,15 +246,15 @@ python -X utf8 edit_project.py render work/project.json -o outputs/edit.mp4
 дорожку субтитров с сохранением предыдущей версии:
 
 ```sh
-python -X utf8 edit_project.py title work/project.json --text "Новое начало" --start 0 --end 2 --animation fade
-python -X utf8 edit_project.py subtitles-import work/project.json /path/to/captions.srt --preset boxed
+./edit title work/project.json --text "Новое начало" --start 0 --end 2 --animation fade
+./edit subtitles-import work/project.json /path/to/captions.srt --preset boxed
 # Вместо импорта, после установки дополнительных зависимостей для распознавания:
-python -X utf8 edit_project.py subtitles-transcribe work/project.json --language ru --model small --preset karaoke
-python -X utf8 edit_project.py subtitles-export work/project.json -o outputs/captions.vtt
-python -X utf8 edit_project.py render work/project.json -o outputs/captioned.mp4
+./edit subtitles-transcribe work/project.json --language ru --model small --preset karaoke
+./edit subtitles-export work/project.json -o outputs/captions.vtt
+./edit render work/project.json -o outputs/captioned.mp4
 ```
 
-Доступные параметры перечислены в `edit_project.py --help` и `<command> --help`.
+Доступные параметры перечислены в `./edit --help` и `./edit <command> --help`.
 Настройки оформления, сдвиги времени, кеш моделей и временные метки слов
 описаны в [руководстве по тексту](skills/beat-sync-edit/references/text-and-subtitles.md).
 
@@ -266,9 +264,10 @@ python -X utf8 edit_project.py render work/project.json -o outputs/captioned.mp4
   это 750 кадров. При нехватке исходников возникает ошибка либо используются
   разрешённые альтернативы; планировщик не вводит незапрошенное замедление
   или повторы и не сокращает заданную длительность ради нехватки материала.
-- Рендерер проекта использует выбранную звуковую дорожку. Он не сохраняет
-  и не смешивает звук из исходных клипов; отдельный файл для распознавания
-  речи сам по себе не добавляет этот звук в монтаж.
+- Музыкальные проекты используют выбранную дорожку; звук исходных клипов,
+  голос и SFX смешиваются только при настройке через `audio-config` (речевые
+  проекты сохраняют исходную речь). Файл для распознавания сам по себе не
+  добавляет свой звук в монтаж.
 - Субтитры встраиваются в изображение MP4. Отдельные SRT/VTT содержат текст
   и время показа, но не анимацию и подсветку слов; переключаемых дорожек
   субтитров в MP4 нет.
@@ -283,8 +282,8 @@ python -X utf8 edit_project.py render work/project.json -o outputs/captioned.mp4
 
 | Проблема | Что проверить |
 |---|---|
-| Скилл не отображается | Проверьте, что папка установлена целиком в обнаруживаемый каталог; удалите дубликаты; при необходимости перезапустите Codex. |
-| Ошибка импорта или зависимостей | Используйте интерпретатор из `.venv` скилла и установите соответствующие зависимости в это окружение. |
+| Скилл не отображается | Проверьте, что папка установлена целиком в обнаруживаемый каталог; удалите дубликаты; при необходимости перезапустите агента. |
+| Ошибка импорта или зависимостей | Запустите `scripts/bootstrap.py` (или `scripts/edit doctor`) и вызывайте лаунчер `scripts/edit`: он всегда использует `.venv` скилла. |
 | FFmpeg не запускается или не кодирует | Проверьте наличие обеих программ в PATH и поддержку `libx264`/AAC. |
 | Не хватает исходников | Добавьте неиспользованные клипы или фото, сократите длительность либо прямо разрешите повторы. Для замедления нужен отдельный прямой запрос. |
 | Субтитры пустые или не совпадают со звуком | Проверьте слышимую звуковую дорожку, её начало, систему отсчёта и сдвиг времени субтитров, выбранный язык. |
@@ -294,8 +293,9 @@ python -X utf8 edit_project.py render work/project.json -o outputs/captioned.mp4
 ## Документация и разработка
 
 - [Все возможности и ограничения](docs/capabilities.ru.md)
-- [Инструкции скилла для Codex](skills/beat-sync-edit/SKILL.md)
+- [Инструкции скилла (Claude Code и Codex)](skills/beat-sync-edit/SKILL.md)
 - [Работа с проектом и формат правок](skills/beat-sync-edit/references/project-workflow.md)
+- [Эффекты, переходы и стили](skills/beat-sync-edit/references/effects-and-looks.md)
 - [Титры, субтитры и распознавание речи](skills/beat-sync-edit/references/text-and-subtitles.md)
 - [Монтаж по речи и субтитры с привязкой к исходнику](skills/beat-sync-edit/references/speech-workflow.md)
 - [Микширование звука и перестановка музыки](skills/beat-sync-edit/references/audio-workflow.md)
@@ -303,8 +303,8 @@ python -X utf8 edit_project.py render work/project.json -o outputs/captioned.mp4
 - [Графика, проверка трекинга, экспорта и пакетная работа](skills/beat-sync-edit/references/workflow-extensions.md)
 - [Специализированные сценарии оригинального проекта](skills/beat-sync-edit/references/legacy-workflow.md)
 
-Основные исходники — Python-файлы в корне репозитория. После их изменения
-пересоберите обе устанавливаемые копии скилла. Проверка упаковки обнаруживает
+Основные исходники — Python-файлы и лаунчеры `edit`/`edit.cmd` в корне
+репозитория. После их изменения пересоберите обе устанавливаемые копии скилла. Проверка упаковки обнаруживает
 пропущенные модули и расхождения инструкций/справочников Codex и Claude Code.
 Запускайте проверки в окружении
 с зависимостями и доступным FFmpeg:

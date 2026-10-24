@@ -122,10 +122,36 @@ def _replacement_span(plan, shot, clip):
     raise ValueError("No unused replacement range is long enough; choose another clip or shorten the shot")
 
 
+def _apply_transition(edits, operation):
+    """Set the outgoing tail and incoming head effects of one or more cuts."""
+    from edit_effects import transition_effects
+    if len(edits) < 2:
+        raise ValueError("A transition needs at least two shots")
+    outgoing, incoming = transition_effects(operation.get("type", "cut"), operation.get("strength", 1.0))
+    if "after" in operation:
+        shot = _selected(edits, {"shot": operation["after"]})[0]
+        index = edits.index(shot)
+        if index == len(edits) - 1:
+            raise ValueError("transition after the final shot has no following cut")
+        cuts = [index]
+    elif "section" in operation:
+        cuts = [index for index in range(len(edits) - 1) if edits[index + 1].get("section") == operation["section"]]
+        if not cuts:
+            raise ValueError(f"No cuts lead into section {operation['section']!r}")
+    elif operation.get("all") is True:
+        cuts = list(range(len(edits) - 1))
+    else:
+        raise ValueError("transition requires after (shot number or id), section, or all: true")
+    for index in cuts:
+        edits[index].setdefault("effects", {}).update(outgoing)
+        edits[index + 1].setdefault("effects", {}).update(incoming)
+
+
 def apply_revisions(plan, operations):
     """Apply deterministic edits to a copy; errors leave the original untouched.
 
-    Supported operations: replace, effects, reframe, speed, duration, reorder.
+    Supported operations: replace, effects, transition, reframe, speed,
+    duration, reorder, plus the text, speech and graphics operations.
     A duration edit borrows frames from the following shot, or an explicit donor.
     """
     from project_plan import validate_plan, _slow_motion_authorized
@@ -133,6 +159,7 @@ def apply_revisions(plan, operations):
     from speech_project import SPEECH_OPERATIONS, apply_speech_operation, refresh_source_captions
     from timeline_map import refresh_anchors
     from graphics_commands import GRAPHICS_OPERATIONS, apply_graphics_operation
+    from edit_effects import validate_effects
 
     if not isinstance(operations, list) or not operations:
         raise ValueError("revisions must be a non-empty list of operations")
@@ -170,6 +197,8 @@ def apply_revisions(plan, operations):
             apply_speech_operation(result, operation)
         elif kind in GRAPHICS_OPERATIONS:
             apply_graphics_operation(result, operation)
+        elif kind == "transition":
+            _apply_transition(edits, operation)
         elif kind == "reorder":
             order = operation.get("order", [])
             if len(order) != len(edits) or set(order) != {e["id"] for e in edits}:
@@ -199,14 +228,17 @@ def apply_revisions(plan, operations):
                 shot.pop("action_anchor", None)
                 shot["reframe"] = {"mode": "auto", "subject": clip.get("subject"), "subject_start": clip["start"]}
             elif kind == "effects":
-                effects = operation.get("values")
-                if not isinstance(effects, dict) or not effects:
-                    raise ValueError("effects requires a non-empty values object")
-                unknown = set(effects) - {"flash", "zoom", "shake", "grade"}
-                if unknown:
-                    raise ValueError(f"Unknown effects: {sorted(unknown)}")
+                effects = operation.get("values", {})
+                reset = operation.get("reset", False)
+                if not isinstance(reset, bool):
+                    raise ValueError("effects reset must be true or false")
+                if not isinstance(effects, dict) or (not effects and not reset):
+                    raise ValueError("effects requires a non-empty values object or reset: true")
+                validate_effects(effects)
                 for shot in selected:
-                    shot.setdefault("effects", {}).update(effects)
+                    if reset:
+                        shot["effects"] = {}
+                    shot.setdefault("effects", {}).update(copy.deepcopy(effects))
             elif kind == "reframe":
                 mode = operation.get("mode", "manual")
                 if mode not in ("auto", "center", "manual", "contain"):
@@ -306,19 +338,19 @@ button{cursor:pointer}button:hover{background:#315170}label{display:block;margin
 #shots{display:flex;flex-wrap:wrap;gap:6px;margin:18px 0}#shots button{font-size:13px}
 textarea{width:95%;height:180px;font:13px monospace}.muted{color:#a6b8cf}#status{min-height:24px;color:#8bd9b1}
 @media(max-width:750px){main{display:block}}</style>
-<h1>Beat-Sync Edit · Review</h1><p class="muted">Select a shot to inspect it. Queue changes and download the revision file, or describe your changes to Codex.</p>
+<h1>Beat-Sync Edit · Review</h1><p class="muted">Select a shot to inspect it. Queue changes and download the revision file, or describe your changes to your editing agent (Claude Code or Codex).</p>
 <main><section><video id="player" controls preload="metadata" src="VIDEO"></video><div id="shots"></div></section>
 <section><label for="shot">Shot</label><select id="shot"></select><p id="details" class="muted"></p>
 <label for="replacement">Replacement clip</label><select id="replacement"></select><button id="replace">Queue replacement</button>
 <label for="seconds">Shot duration (seconds; borrow from adjacent shot)</label><input id="seconds" type="number" min="0.1" step="0.1"><button id="duration">Queue duration</button>
-<p><button id="flash">Remove all flashes</button> <button id="download">Download revisions.json</button></p>
+<p><button id="flash">Remove all flashes</button> <button id="accents">Remove all accent effects</button> <button id="download">Download revisions.json</button></p>
 <details><summary>Edit titles and subtitles</summary>
 <label for="textcue">Text cue</label><select id="textcue"></select>
 <label for="cuetext">Text</label><textarea id="cuetext" style="height:80px"></textarea>
 <label for="cuestart">Start / end (seconds)</label><input id="cuestart" type="number" min="0" step="0.01"><input id="cueend" type="number" min="0" step="0.01">
 <p><button id="textsave">Queue text change</button> <button id="textremove">Remove text cue</button></p></details>
 <label for="operations">Queued revisions</label><textarea id="operations" readonly>[]</textarea><p id="status" role="status"></p>
-<p class="muted">Changes apply on the next render. Give revisions.json to Codex, or run:<br><code>edit_project.py revise project.json --operations revisions.json</code><br>Then render a new preview.</p></section></main>
+<p class="muted">Changes apply on the next render. Give revisions.json to your editing agent, or run:<br><code>edit_project.py revise project.json --operations revisions.json</code><br>Then render a new preview.</p></section></main>
 <script>const data=DATA,player=document.getElementById('player'),shot=document.getElementById('shot'),queue=[];
 const el=id=>document.getElementById(id),add=op=>{queue.push(op);el('operations').value=JSON.stringify(queue,null,2);el('status').textContent='Change queued. Download revisions to apply.'};
 data.edits.forEach((e,i)=>{let o=new Option(`${i+1}. ${e.id} · ${e.section}`,e.id);shot.add(o);let b=document.createElement('button');b.textContent=`${i+1} · ${(e.duration_frames/data.fps).toFixed(2)}s`;b.onclick=()=>{shot.value=e.id;selectShot(true)};el('shots').append(b)});
@@ -328,6 +360,7 @@ shot.onchange=()=>selectShot(true);selectShot(false);
 el('replace').onclick=()=>{if(el('replacement').value)add({op:'replace',shot:shot.value,clip_id:el('replacement').value})};
 el('duration').onclick=()=>{let seconds=Number(el('seconds').value);if(Number.isFinite(seconds)&&seconds>0)add({op:'duration',shot:shot.value,seconds});else el('status').textContent='Enter a positive duration.'};
 el('flash').onclick=()=>add({op:'effects',all:true,values:{flash:0}});
+el('accents').onclick=()=>add({op:'effects',all:true,values:ACCENTS});
 const cues=[...data.titles.map(c=>({...c,track:'title'})),...data.subtitles.map(c=>({...c,track:'subtitle'}))];
 cues.forEach((c,i)=>el('textcue').add(new Option(`${c.track} · ${c.id} · ${c.text.slice(0,36)}`,String(i))));
 function selectCue(seek){let c=cues[Number(el('textcue').value)];if(!c)return;el('cuetext').value=c.text;el('cuestart').value=(c.start_frame/data.fps).toFixed(3);el('cueend').value=(c.end_frame/data.fps).toFixed(3);if(seek)player.currentTime=c.start_frame/data.fps}
@@ -337,6 +370,9 @@ el('textremove').onclick=()=>{let c=cues[Number(el('textcue').value)];if(c)add({
 el('download').onclick=()=>{if(!queue.length){el('status').textContent='Queue a change first.';return}let u=URL.createObjectURL(new Blob([JSON.stringify(queue,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=u;a.download='revisions.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};</script></html>'''
     # Substitute the JSON first so a filename containing DATA cannot become JS.
     # The distinct marker also avoids replacing user-controlled annotation text.
+    from edit_effects import ACCENT_EFFECTS
+    accents = json.dumps({name: 0 for name in ACCENT_EFFECTS + ("shake",)})
+    page = page.replace("values:ACCENTS}", "values:" + accents + "}")
     page = page.replace("const data=DATA,", "const data=" + data + ",")
     page = page.replace('src="VIDEO"', 'src="' + html.escape(media_url, quote=True) + '"')
     out.parent.mkdir(parents=True, exist_ok=True)

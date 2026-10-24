@@ -84,7 +84,8 @@ class MusicalStructureTests(unittest.TestCase):
 
 class AccelerationTests(unittest.TestCase):
     def test_all_presets_allocate_acceleration_and_never_repeat(self):
-        for preset in ("cinematic", "car", "gaming", "product"):
+        from edit_presets import PRESETS
+        for preset in PRESETS:
             beatmap, library = inputs()
             plan = build_plan(beatmap, library, duration=25, preset=preset)
             accelerated = [e for e in plan["edits"] if len(e["speed_points"]) > 2]

@@ -1,4 +1,5 @@
 """Both agents receive the complete runtime and identical maintained instructions."""
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -19,6 +20,9 @@ class SkillBundleTests(unittest.TestCase):
             (root/"dependency.py").write_text("VALUE = 42\n")
             for name in ("LICENSE", "requirements.txt", "requirements.lock.txt", "requirements-transcription.txt", "UPSTREAM.json"):
                 (root/name).write_text("fixture\n")
+            for name in ("edit", "edit.cmd"):
+                (root/name).write_text("launcher\n")
+            (root/"edit").chmod(0o755)
             canonical = root/"skills"/"beat-sync-edit"
             for directory in (canonical/"references", canonical/"assets"):
                 directory.mkdir(parents=True)
@@ -32,8 +36,11 @@ class SkillBundleTests(unittest.TestCase):
             self.assertEqual(build().returncode, 0)
             self.assertEqual(build("--check").returncode, 0)
             mirror = root/".claude"/"skills"/"beat-sync-edit"
-            for name in ("scripts/entry.py", "scripts/dependency.py", "references/workflow.md", "assets/style.json", "SKILL.md", "LICENSE"):
+            for name in ("scripts/entry.py", "scripts/dependency.py", "scripts/edit", "scripts/edit.cmd",
+                         "references/workflow.md", "assets/style.json", "SKILL.md", "LICENSE"):
                 self.assertEqual((canonical/name).read_bytes(), (mirror/name).read_bytes())
+            if os.name != "nt":
+                self.assertTrue(os.access(mirror/"scripts"/"edit", os.X_OK))
             (mirror/"SKILL.md").write_text("outdated old workflow\n")
             self.assertNotEqual(build("--check").returncode, 0)
             self.assertEqual(build().returncode, 0)

@@ -1,80 +1,105 @@
 ---
 name: beat-sync-edit
-description: Create and revise music edits, speech-first Shorts/Reels/TikToks and local motion graphics from supplied media. Use for beat-sync, эдиты, монтаж речи, B-roll, audio mixing, captions, tracking, speed ramps and video export in Codex or Claude Code.
+description: Edit the user's own footage, photos, speech and music into finished MP4s - beat-synced montages and fan edits (phonk, anime/AMV, car, gaming, travel, product), speech-first Shorts/Reels/TikToks with B-roll, captions and titles, audio mixing, subject tracking and reframing, speed ramps, transitions, flashes, glitch/RGB and color looks, previews, revisions and export QA. Use for "make an edit", "cut this to the beat", "add subtitles", эдит, монтаж под музыку/бит, нарезка, шортс/рилс, субтитры, переходы и эффекты - in Claude Code or Codex.
 ---
 
 # Beat-Sync Edit
 
-Turn supplied footage, speech/music and creative directions into a saved editing
-project, a reviewable preview and a finished MP4. This instruction is canonical
-for both Codex and Claude Code. Use the same project CLI in either agent.
+Turn supplied media and creative directions into a saved editing project, a
+reviewable preview and a finished MP4. One project CLI serves Claude Code and
+Codex on Windows, macOS and Linux. It edits existing media; it never generates
+footage, music or voices.
 
-## Setup and paths
+## Setup (once per installation)
 
-Resolve `skillRoot` from this SKILL.md. Python tools are in `scripts/` and local
-dependencies belong in `.venv/`. The environment is not shipped in Git.
+`skillRoot` is the folder containing this SKILL.md. Create or reuse its
+environment with any Python 3.10+ (3.12 recommended):
 
-```powershell
-$skillRoot = Split-Path -Parent '<absolute path to this SKILL.md>'
-$editPython = Join-Path $skillRoot '.venv/Scripts/python.exe'
-$editScripts = Join-Path $skillRoot 'scripts'
-# Only if the environment does not exist:
-python -m venv (Join-Path $skillRoot '.venv')
-& $editPython -m pip install -r (Join-Path $skillRoot 'requirements.txt')
+```sh
+python3 <skillRoot>/scripts/bootstrap.py            # Windows: python <skillRoot>\scripts\bootstrap.py
 ```
 
-Use `-X utf8` for Python commands. On Linux/macOS create the environment with
-`python3 -m venv` and use `.venv/bin/python`. FFmpeg and ffprobe must be on PATH.
-`requirements.lock.txt` is the tested Windows/Python 3.12 snapshot;
-`requirements.txt` is the portable dependency specification.
+It reuses a healthy `.venv`, installs `requirements.txt` only when needed,
+checks FFmpeg/ffprobe (libx264 + AAC), the default Unicode font and options,
+and prints `READY` or what to fix. Add `--transcription` only when speech
+recognition is needed; `--lock` installs the tested pinned versions. Never put
+user media, renders or caches inside the skill folder.
 
-Keep analysis, persistent ZIP imports, project JSON, tracking/render caches and
-previews in the current project's `work/`; final MP4s go to `outputs/` unless the
-user chooses another location. Pass absolute paths. Do not put media in the
-skill installation. An unset `NUMBA_CACHE_DIR` defaults to temporary storage;
-set it under work when a persistent cache is useful.
+## Calling the CLI
+
+In this skill, **`edit` means the launcher by absolute path**:
+`<skillRoot>/scripts/edit` on macOS/Linux, `<skillRoot>\scripts\edit.cmd` on
+Windows. Agent shell calls do not keep functions or variables between calls,
+so write the absolute path in every command (or set a variable inside the same
+command). The launcher runs `scripts/edit_project.py` with `-X utf8` and the
+skill's `.venv`.
+
+```sh
+/abs/skill/scripts/edit doctor                    # environment report
+/abs/skill/scripts/edit plan --help               # exact flags of one command
+/abs/skill/scripts/edit tool beat_map.py --help   # bundled legacy/helper scripts
+```
+
+`$work` and `$out` in the references stand for absolute `<project>/work` and
+`<project>/outputs` folders; pass absolute paths everywhere. `edit contract
+--json` describes every command; `--json` gives a parseable result envelope.
+Set `NUMBA_CACHE_DIR` under `$work` when a persistent librosa cache helps.
 
 ## Choose the workflow
 
-For new work, use **scripts/edit_project.py**. Select the planner from the task:
-
-| Task | Read and use |
+| Task | Read |
 |---|---|
-| Music montage or action edit | [project workflow](references/project-workflow.md): analyze, music, plan, preview, revise, render. |
-| Interview, lesson, podcast or speech short | [speech workflow](references/speech-workflow.md): transcript-led selection, correctable words, preserved speech and B-roll. |
-| Local animated titles/cards/charts or supplied Remotion composition | [workflow extensions](references/workflow-extensions.md): editable graphic layers, local motion assets and optional Remotion rendering. |
-| Original sound + voice + music + SFX | [audio workflow](references/audio-workflow.md): gains, fades, ducking, measured normalization and music arrangement. |
-| Improve selection, correct musical structure, evaluate edits | [music and editorial review](references/music-editorial.md): confidence, phrase flow, preferences, alternatives, feedback and held-out calibration. |
-| Captions/titles in an existing edit | [text and subtitles](references/text-and-subtitles.md); use the speech reference for source-bound words/translations. |
-| Tracking correction, style, export QA, dry run or batch work | [workflow extensions](references/workflow-extensions.md). |
+| Music montage, fan edit, action/car/gaming/travel edit | [project workflow](references/project-workflow.md): analyze, music, plan, preview, revise, render |
+| Effects, transitions, grades, "make it look like …" | [effects and looks](references/effects-and-looks.md): catalog and request → operation recipes |
+| Interview, lesson, podcast or speech short | [speech workflow](references/speech-workflow.md): transcript-led selection, correctable words, preserved speech, B-roll |
+| Original sound + voice + music + SFX | [audio workflow](references/audio-workflow.md): gains, fades, ducking, loudness, bar-based arrangement |
+| Captions, titles, SRT/VTT, automatic subtitles | [text and subtitles](references/text-and-subtitles.md) (source-bound words: speech workflow) |
+| Better selection, wrong beats, evaluating edits | [music and editorial review](references/music-editorial.md) |
+| Local animated cards/charts, Remotion, tracking fixes, style, QA, dry runs, batches | [workflow extensions](references/workflow-extensions.md) |
+| White-flash photo montage, original EDL pipeline, custom FFmpeg filters | [legacy workflow](references/legacy-workflow.md) |
 
-A speech project should be planned around complete thoughts and audible original
-speech. A music project should be planned around its measured pulse or phrases.
-Graphic compositions use authored timing. Do not substitute one for the other.
+Plan speech around complete thoughts and audible original speech, music around
+its measured pulse or phrases, and graphic compositions around authored timing.
+Do not substitute one for another.
 
-1. Analyze the supplied media and, when relevant, selected music. For speech,
-   start with transcript analysis; authored motion graphics need no soundtrack.
-2. View contact sheets and relevant source frames. Annotate objects, shot sizes,
-   meaningful action times and subject boxes using observed evidence. Apply the
-   annotations to the library before planning a content-aware edit.
-3. Plan with the requested duration, format, pace and creative style. Inspect
-   explanations, alternatives, music hypotheses or transcript ranges. Presets are starting points;
-   explicit user preferences override their effects and color settings.
-4. Render a preview, inspect the framing and action/beat alignment, and apply
-   targeted revisions to the saved project. Generate a final render when the
-   requested result is ready; no extra approval is implied by the preview step.
-5. Check the exported file with export QA, inspect representative frames and
-   listen to speech/music transitions. Use tracking diagnostics to locate low
-   confidence intervals. Deliver the MP4 and state anything not actually checked.
+## Core loop
 
-For titles, captions, SRT/VTT files or automatic subtitles, read
-[text-and-subtitles.md](references/text-and-subtitles.md). Add text to the saved
-project, preview it and correct wording/timing before export. Use local speech
-recognition only for audio that belongs in the requested edit; review its output.
-The optional speech requirements and model are separate from the base install.
-Check for supplied transcripts before running ASR. Corrections and imported
-translations preserve stable word IDs; do not present translation timing as
-measured speech alignment. Text-only revisions preserve cached shots.
+1. **Analyze** the supplied media (files, folders, ZIPs) and, for music edits,
+   the chosen track. For speech start from a supplied transcript; check for one
+   before running recognition.
+2. **Look before planning.** Open every contact sheet (images can be read
+   directly) and extra frames where needed. Annotate tags, shot types, action
+   times and subject boxes from what is visible; apply them to the library.
+3. **Plan** with the requested duration, format (9:16 `1080x1920`, 1:1
+   `1080x1080`, 16:9 `1920x1080`), pace, preset and effects. Inspect the
+   explanations, alternatives, section boundaries or transcript ranges.
+4. **Preview** and inspect framing, beat/action alignment, effects at the cuts
+   and captions. Translate feedback into targeted `revise` operations on the
+   saved project instead of re-planning.
+5. **Render** when the requested result is ready; a preview does not imply
+   another approval step.
+6. **Verify** with the export QA report and its contact sheets; listen to
+   speech/music transitions when possible. Deliver the MP4 path, duration,
+   format, shot count and effects, and state anything not actually checked.
+
+## Translating requests
+
+| User says (EN / RU) | Do |
+|---|---|
+| "15-second TikTok" / «на 15 секунд, вертикально» | `--duration 15 --size 1080x1920` |
+| "faster, more cuts" / «динамичнее, больше склеек» | `--section-stride drop=1 --min-shot 0.2`, or preset `car`/`gaming`/`phonk` |
+| "calmer, let shots breathe" / «спокойнее» | `--beat-stride 4 --min-shot 1.2`, or preset `cinematic`/`travel` |
+| "start with the best moment" / «начни с самого яркого» | `revise` `replace` shot 1 with the strongest reviewed clip |
+| flashes, glitch, whip, shake, pulse, film look, b&w / вспышки, глитч, переходы, тряска, ЧБ | [effects and looks](references/effects-and-looks.md) recipes |
+| "keep the car/person in frame" / «держи объект в кадре» | `reframe` `auto` with the subject box; check the tracking report |
+| "subtitles" / «субтитры», «караоке» | speech workflow, or `subtitles-transcribe` / `subtitles-import` |
+| "like this reference" / «как в этом видео» | match only the named aspects; ask which ones when unclear |
+| "slow motion" / «слоумо», «замедли» | only as an explicit request, through the playback-speed rule below |
+
+Craft defaults when the user gives no direction: open on a strong, readable
+shot within the first second; cut on beats or phrase starts; reserve hard
+accents for the drop; one signature effect and one grade; keep text inside the
+safe area; end on a clean frame. Explicit user preferences always win.
 
 ## Playback speed rule
 
@@ -98,33 +123,30 @@ holds, or an explicitly changed duration/repeat constraint. Do not silently
 slow or truncate the edit to meet its duration. Existing projects receive the
 same checks; an old slow-motion setting is not evidence of a user request.
 
-Automatic beat/energy analysis estimates musical structure. A weak pulse uses
-`phrase_flow`; do not fabricate a tempo grid and call it detected beat alignment.
-Use manual music overrides after listening when the estimates are wrong.
-Automatic tracking uses face/motion cues or a selected subject box; check that
-it follows the intended object. Requested slow motion uses optical-flow frame
-interpolation; inspect moving edges and occlusions for artifacts. These features
-do not replace editorial inspection or create missing scenes. Use source-bound
-word/action/shot/beat/event anchors for overlays and sounds that must survive
-revisions. Record accepted/rejected source moments only after reviewing them;
-never fabricate user feedback to improve a score.
+## Honest results
 
-For repeated evaluation use the real-media manifest workflow. Synthetic fixtures
-verify mechanics, not real-world tracking identity, ASR accuracy or editorial
-quality. A missing or unreviewed case remains unverified. Do not promise virality.
+- Beat/energy analysis estimates musical structure. A weak pulse uses
+  `phrase_flow`; never fabricate a tempo grid and call it detected beats.
+  Correct wrong estimates with music overrides after listening.
+- Tracking follows face/motion cues or a chosen subject box; check that it
+  follows the intended object, especially when people cross. Optical-flow slow
+  motion can smear moving edges; inspect them.
+- Recognized speech can mishear names and lyrics; review it. Translations are
+  supplied by the user or agent, never presented as measured alignment.
+- Use source-bound word/action/shot/beat/event anchors for overlays and sounds
+  that must survive revisions.
+- Record accepted/rejected moments and review observations only after actually
+  reviewing them; never fabricate feedback, review states or evidence.
+  `technical_pass` covers technical checks only. Synthetic fixtures verify
+  mechanics, not editorial quality. Do not promise virality.
 
-## Existing projects and specialized effects
+## Existing projects and references
 
-For a saved version-2 project, inspect it and use `revise`, `preview`, `render`;
-preserve stable shot IDs and the recoverable history. Avoid regenerating the
-entire plan for a local change such as replacing one shot or removing flashes.
+For a saved version-2 project, `inspect` it and use `revise`, `preview`,
+`render`; preserve stable shot IDs and the recoverable `.history`. Avoid
+re-planning for a local change such as replacing one shot, adding a transition
+or removing flashes.
 
-For the original JSON EDL pipeline, square white-flash photo montages, custom
-FFmpeg effects, or legacy command flags, read
-[legacy-workflow.md](references/legacy-workflow.md). The original CLIs remain
-available. Use the project workflow when exact duration and reusable revisions
-are required.
-
-For a reference video, match only the requested aspects (rhythm, color, framing,
-effects). If the user's intended aspects are unclear, ask before applying a
-whole look. Preserve proportions and natural color unless requested otherwise.
+For a reference video, match only the requested aspects (rhythm, color,
+framing, effects). If the intended aspects are unclear, ask before applying a
+whole look. Preserve proportions and natural color unless asked otherwise.

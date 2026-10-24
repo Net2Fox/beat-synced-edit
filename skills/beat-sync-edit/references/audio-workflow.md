@@ -22,7 +22,7 @@ The configuration JSON is the value of `project.audio_mix`:
     {
       "id": "bed",
       "role": "music",
-      "path": "C:/media/music.wav",
+      "path": "/abs/path/music.wav",
       "source_start": 12,
       "source_end": 42,
       "start": 0,
@@ -34,7 +34,7 @@ The configuration JSON is the value of `project.audio_mix`:
     {
       "id": "accent",
       "role": "sfx",
-      "path": "C:/media/hit.wav",
+      "path": "/abs/path/hit.wav",
       "anchor": {"type": "word", "id": "word-0042"},
       "duration": 0.4,
       "gain_db": -6
@@ -111,7 +111,7 @@ signals can be unmeasurable and are reported as such, never as a numeric pass.
 ## Arrange supplied music by bars
 
 ```
-python edit_project.py arrange-music music.wav --beats music.beats.json --segments arrangement.json -o arranged.wav --beats-per-bar 4 --first-downbeat 0
+edit arrange-music music.wav --beats music.beats.json --segments arrangement.json -o arranged.wav --beats-per-bar 4 --first-downbeat 0
 ```
 
 Example `arrangement.json`:

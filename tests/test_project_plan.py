@@ -125,12 +125,18 @@ class MusicalAndSemanticTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "contiguously"):
             build_plan(beatmap, library, duration=10, sections=manual)
 
-    def test_four_presets_change_pace_color_and_effects(self):
+    def test_presets_change_pace_color_and_effects(self):
         beatmap, library = inputs((100, 100, 100, 100))
         plans = {name: build_plan(beatmap, library, duration=20, preset=name) for name in list_presets()}
         self.assertGreater(len(plans["car"]["edits"]), len(plans["cinematic"]["edits"]))
-        self.assertEqual(len({p["edits"][0]["effects"]["grade"] for p in plans.values()}), 4)
+        self.assertEqual(len({json.dumps(p["edits"][0]["effects"], sort_keys=True) for p in plans.values()}), len(plans))
+        self.assertGreaterEqual(len({p["edits"][0]["effects"]["grade"] for p in plans.values()}), 6)
         self.assertGreater(max(e["effects"]["flash"] for e in plans["car"]["edits"]), max(e["effects"]["flash"] for e in plans["product"]["edits"]))
+        phonk = plans["phonk"]["edits"]
+        self.assertTrue(any(e["effects"]["glitch"] > 0 for e in phonk))
+        self.assertTrue(any(e["effects"]["glitch"] == 0 for e in phonk), "accents stay on accent cuts only")
+        self.assertTrue(all(e["effects"]["vignette"] == .45 for e in phonk), "looks apply to every shot")
+        self.assertTrue(all(e["effects"]["pulse"] == 0 for e in phonk if e["section"] in ("intro", "outro")))
         recipe = get_preset("car")
         recipe["effects"]["zoom"] = 9
         self.assertNotEqual(get_preset("car")["effects"]["zoom"], 9)

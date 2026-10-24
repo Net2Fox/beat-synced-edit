@@ -1,15 +1,16 @@
 # Persistent editing projects
 
-Use `scripts/edit_project.py` for exact-duration edits, mixed media, semantic
-selection, music structure, tracked vertical framing, speed ramps and revisions.
-Use the skill's Python interpreter with `-X utf8`; pass absolute paths. All files
-below live in the user's project work directory, not the skill installation.
+Use the project CLI for exact-duration edits, mixed media, semantic selection,
+music structure, tracked vertical framing, speed ramps, effects and revisions.
+`edit` is the launcher from SKILL.md (absolute path in every command); `$work`
+and `$out` stand for absolute project work/output folders. All files below live
+in the user's project, not the skill installation.
 
 ## Analyze and review
 
-```powershell
-& $editPython -X utf8 "$editScripts/edit_project.py" analyze $footageFolder $extraVideo $photosZip --work "$work/library"
-& $editPython -X utf8 "$editScripts/edit_project.py" music $song --duration 25 -o "$work/beats.json"
+```sh
+edit analyze "$footageFolder" "$extraVideo" "$photosZip" --work "$work/library"
+edit music "$song" --duration 25 -o "$work/beats.json"
 ```
 
 Inputs may be files, folders, or ZIPs. ZIP contents are imported persistently
@@ -51,8 +52,8 @@ a later source range from the scene.
 
 Apply observations without decoding sources again:
 
-```powershell
-& $editPython -X utf8 "$editScripts/edit_project.py" annotate "$work/library/library.json" --annotations "$work/annotations.json"
+```sh
+edit annotate "$work/library/library.json" --annotations "$work/annotations.json"
 ```
 
 You can also re-run `analyze` with `--annotations`. Keep the same input list when
@@ -62,13 +63,17 @@ identity; annotations are applied afresh. Each clip records sample-time evidence
 
 ## Plan
 
-```powershell
-& $editPython -X utf8 "$editScripts/edit_project.py" plan --library "$work/library/library.json" --beats "$work/beats.json" --duration 25 --preset car --size 1080x1920 --fps 30 -o "$work/project.json"
+```sh
+edit plan --library "$work/library/library.json" --beats "$work/beats.json" --duration 25 --preset car --size 1080x1920 --fps 30 -o "$work/project.json"
 ```
 
-`--preset` accepts `cinematic`, `car`, `gaming`, `product`. Run `presets` to see
-their actual pace, color, transition and speed settings. Choose from the user's
-intent; a preset is a starting point and explicit requests take precedence.
+`--preset` accepts `cinematic`, `car`, `gaming`, `product`, `phonk`, `anime`,
+`travel`. Run `edit presets` to see their actual pace, color, effect and speed
+settings. Choose from the user's intent; a preset is a starting point and
+explicit requests take precedence. `--effect NAME=VALUE` (repeatable) overrides
+one preset effect, e.g. `--effect rgb_split=0.6 --effect grade=mono`; the
+catalog is in [effects-and-looks.md](effects-and-looks.md). The planner applies
+accent effects only on accent cuts of the drop and keeps looks on every shot.
 Use `--section-stride drop=1 --min-shot 0.25` for faster cuts in the middle while
 retaining longer intro/outro plans; repeat `--section-stride NAME=N` for other
 sections. `--beat-stride N` changes every section. `--min-shot`/`--max-shot`
@@ -113,8 +118,8 @@ explicitly asks for slow motion and interpolation has been enabled.
 
 ## Preview and revise
 
-```powershell
-& $editPython -X utf8 "$editScripts/edit_project.py" preview "$work/project.json" -o "$work/preview.mp4"
+```sh
+edit preview "$work/project.json" -o "$work/preview.mp4"
 ```
 
 This renders a smaller video plus an offline HTML review page with a player,
@@ -130,9 +135,13 @@ Translate conversational revisions into JSON operations. Shot numbers start at
 [
   {"op": "replace", "shot": 3, "clip_id": "asset_0123456789ab:0000"},
   {"op": "effects", "all": true, "values": {"flash": 0}},
+  {"op": "transition", "after": 2, "type": "whip", "strength": 0.7},
   {"op": "duration", "shot": 1, "seconds": 2.5, "borrow_from": 2}
 ]
 ```
+
+`reorder` takes every shot ID exactly once:
+`{"op": "reorder", "order": ["shot-002", "shot-001", "shot-003"]}`.
 
 Replacement preserves output duration. A duration revision borrows frames from
 another shot, preserving the total; by default it uses the next shot (previous
@@ -142,12 +151,15 @@ choose a longer unused source range or another shot instead.
 Timing/reordering revisions also update the section spans; the original musical
 sections remain in `original_sections`. Check the revised cuts against the beat
 map, since an explicitly changed duration may move a cut off a beat.
-Effects can target `shot`, `section`, or `all: true`. Supported values are
-`flash`/`shake` from 0 to 1, `zoom` >= 1, and a supported `grade`.
+Effects can target `shot`, `section`, or `all: true`; `reset: true` clears a
+shot's effects first. `transition` sets both sides of a cut
+(`{"op":"transition","after":3,"type":"whip","strength":0.8}`). All effect
+names, ranges, grades and transitions are in
+[effects-and-looks.md](effects-and-looks.md) and `edit effects`.
 
-```powershell
-& $editPython -X utf8 "$editScripts/edit_project.py" revise "$work/project.json" --operations "$work/revisions.json"
-& $editPython -X utf8 "$editScripts/edit_project.py" preview "$work/project.json" -o "$work/preview-v2.mp4"
+```sh
+edit revise "$work/project.json" --operations "$work/revisions.json"
+edit preview "$work/project.json" -o "$work/preview-v2.mp4"
 ```
 
 Revisions are validated before writing; previous project JSON is saved under
@@ -191,8 +203,8 @@ Copy the actual request into `--slow-motion-prompt`; do not treat "cinematic",
 For example, if the user actually said "Slow the impact down to half speed
 with frame interpolation":
 
-```powershell
-& $editPython -X utf8 "$editScripts/edit_project.py" plan --library "$work/library/library.json" --beats "$work/beats.json" --duration 25 --slow-motion-prompt 'Slow the impact down to half speed with frame interpolation' --interpolation optical_flow --min-speed 0.5 -o "$work/project.json"
+```sh
+edit plan --library "$work/library/library.json" --beats "$work/beats.json" --duration 25 --slow-motion-prompt 'Slow the impact down to half speed with frame interpolation' --interpolation optical_flow --min-speed 0.5 -o "$work/project.json"
 ```
 
 The project records `policies.allow_slow_motion`, the exact quote in
@@ -226,8 +238,8 @@ trim its end or choose a longer source instead of freezing the final frame.
 
 ## Final render
 
-```powershell
-& $editPython -X utf8 "$editScripts/edit_project.py" render "$work/project.json" -o "$outputs/edit.mp4"
+```sh
+edit render "$work/project.json" -o "$out/edit.mp4"
 ```
 
 Output is H.264/AAC MP4 with square pixels. The verification JSON records actual

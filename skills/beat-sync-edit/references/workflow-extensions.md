@@ -1,7 +1,7 @@
 # Styles, motion, tracking, QA and machine execution
 
-Use `python scripts/edit_project.py COMMAND --help` inside an installed bundle.
-From the repository root omit `scripts/`. All examples are local operations.
+`edit` is the launcher from SKILL.md; `edit COMMAND --help` shows exact flags.
+All examples are local operations.
 Supply absolute source paths in JSON. Keep source media separate from output,
 cache, reports and execution plans. The `contract --json` command describes the
 actual parser, including all command options and required arguments.

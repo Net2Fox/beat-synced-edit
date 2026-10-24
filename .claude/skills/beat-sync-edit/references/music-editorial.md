@@ -1,8 +1,8 @@
 # Musical structure, selection and evaluation
 
-All commands below use `python -X utf8 scripts/edit_project.py` in an installed
-skill, or `python -X utf8 edit_project.py` from the repository. Use absolute media
-paths and keep intermediate files under the current project's work directory.
+`edit` is the skill launcher described in SKILL.md (call it by absolute path).
+Use absolute media paths and keep intermediate files under the current
+project's work directory.
 
 ## Music measurements and overrides
 
@@ -68,10 +68,10 @@ Use the profile in both `candidates --preferences profile.json` and
 the user has not requested; feedback is a separate reviewed observation.
 
 ```sh
-python edit_project.py feedback library.json --profile profile.json --clip CLIP_ID --decision reject --reason "The subject is occluded" --reviewer editor
-python edit_project.py feedback library.json --profile profile.json --clip CLIP_ID --decision clear --reason "Corrected framing reviewed" --reviewer editor
-python edit_project.py calibrate profile.json --holdout .25 -o model-report.json
-python edit_project.py plan --library library.json --beats beats.json --duration 25 --preferences profile.json --editorial-model model-report.json -o project.json
+edit feedback library.json --profile profile.json --clip CLIP_ID --decision reject --reason "The subject is occluded" --reviewer editor
+edit feedback library.json --profile profile.json --clip CLIP_ID --decision clear --reason "Corrected framing reviewed" --reviewer editor
+edit calibrate profile.json --holdout .25 -o model-report.json
+edit plan --library library.json --beats beats.json --duration 25 --preferences profile.json --editorial-model model-report.json -o project.json
 ```
 
 Accept boosts the exact candidate, reject excludes it, clear reverses a prior
@@ -107,9 +107,9 @@ default (`--minimum-overlap`). Unknown material is never counted as a negative.
 ## Reusable real-media review
 
 ```sh
-python edit_project.py review-manifest project.json --render export.mp4 --kind real --scenario multiple-people -o review.json
-python edit_project.py evaluate-manifest review.json -o report.json
-python edit_project.py record-case-review review.json --case case-001 --observations observations.json --reviewer editor --notes "Watched the export and sources" --labels labels.json
+edit review-manifest project.json --render export.mp4 --kind real --scenario multiple-people -o review.json
+edit evaluate-manifest review.json -o report.json
+edit record-case-review review.json --case case-001 --observations observations.json --reviewer editor --notes "Watched the export and sources" --labels labels.json
 ```
 
 Available scenarios: musical-edit, multiple-people, fast-motion, quiet-speech,

@@ -22,6 +22,8 @@ import uuid
 import cv2
 import numpy as np
 
+from edit_effects import effect_value, validate_effects
+from effects_render import apply_frame_effects, zoom_amount
 from text_overlay import TextCompositor, validate_text_tracks
 
 RENDER_VERSION = 3
@@ -40,13 +42,6 @@ def probe(path, count_frames=False):
         args += ["-count_frames"]
     args += ["-show_streams", "-show_format", "-of", "json", str(path)]
     return json.loads(_run(args))
-
-
-def _positive_float(value, name):
-    value = float(value)
-    if not math.isfinite(value) or value <= 0:
-        raise ValueError(f"{name} must be finite and positive")
-    return value
 
 
 def _integer(value, name):
@@ -212,27 +207,7 @@ def _read_image(path):
 
 def _effect_frame(frame, effects, index, count, fps):
     """Effects are contained in each shot and never alter its frame count."""
-    grade = effects.get("grade", "none")
-    arr = frame.astype(np.float32) / 255
-    if grade == "warm":
-        arr *= np.array([.96, 1.01, 1.06], np.float32)
-    elif grade == "cool":
-        arr *= np.array([1.08, 1.01, .97], np.float32)
-    elif grade == "vivid":
-        gray = np.sum(arr * np.array([.114, .587, .299]), axis=2, keepdims=True)
-        arr = (gray + (arr-gray)*1.22 - .5)*1.07 + .5
-    elif grade == "cinematic":
-        gray = np.sum(arr * np.array([.114, .587, .299]), axis=2, keepdims=True)
-        arr = (gray + (arr-gray)*.86 - .5)*1.12 + .51
-        arr[..., 0] += .025*(1-arr[..., 0])
-        arr[..., 2] += .02*arr[..., 2]
-    elif grade not in ("none", "neutral", None):
-        raise ValueError(f"Unknown color grade: {grade}")
-    flash = float(effects.get("flash", 0))
-    # 80 ms fade from white: a transition on this cut, with no overlap shortening.
-    amount = flash * max(0, 1-index/max(1, fps*.08))
-    arr = arr*(1-amount) + amount
-    return (np.clip(arr, 0, 1)*255).astype(np.uint8)
+    return apply_frame_effects(frame, effects, index, count, fps)
 
 
 def _file_digest(path):
@@ -275,7 +250,7 @@ def _center(track, source_time, reframe):
     return .5, .5
 
 
-def _render_shot(edit, output, width, height, fps, preview, media, interpolation="none"):
+def _render_shot(edit, output, width, height, fps, preview, media, interpolation="none", pulse_frames=()):
     from smart_reframe import crop_frame
     from tracking_review import resolve_track, tracking_report
     count = int(edit["duration_frames"])
@@ -295,14 +270,8 @@ def _render_shot(edit, output, width, height, fps, preview, media, interpolation
         if start < 0 or end > duration + 1/max(1, _ratio(stream.get("avg_frame_rate"), 30)):
             raise ValueError(f"Source span {start}–{end} exceeds {source.name} ({duration}s)")
         reader = _VideoReader(source, start, end, stream, interpolation=interpolation)
-    effects = edit.get("effects", {})
-    zoom = _positive_float(effects.get("zoom", 1), "zoom")
-    if zoom < 1:
-        raise ValueError("Zoom must be at least 1")
-    shake = float(effects.get("shake", 0))
-    flash = float(effects.get("flash", 0))
-    if not 0 <= shake <= 1 or not 0 <= flash <= 1:
-        raise ValueError("Flash and shake strengths must be between 0 and 1")
+    effects = validate_effects(edit.get("effects", {}), f"{edit.get('id', 'shot')} effects")
+    shake = effect_value(effects, "shake")
     with tempfile.TemporaryFile() as log:
         encoder = subprocess.Popen([
             "ffmpeg", "-y", "-v", "error", "-nostdin", "-f", "rawvideo", "-pix_fmt", "bgr24",
@@ -314,12 +283,9 @@ def _render_shot(edit, output, width, height, fps, preview, media, interpolation
             for i, source_time in enumerate(times):
                 frame = image if kind == "image" else reader.frame(float(source_time))
                 cx, cy = _center(track, source_time, reframe)
-                # A quick punch decays over 180 ms. Still-image zoom grows gently.
-                if kind == "image":
-                    amount = 1+(zoom-1)*(i/max(1, count-1))
-                else:
-                    amount = 1+(zoom-1)*max(0, 1-i/max(1, fps*.18))**2
-                amount += shake*.025
+                # A quick punch decays over 180 ms. Still-image zoom grows gently;
+                # beat pulses add a short bump on every beat inside the shot.
+                amount = zoom_amount(effects, kind, i, count, fps, pulse_frames)
                 t = i/fps
                 cx += shake*.012*math.sin(t*43)
                 cy += shake*.012*math.cos(t*37)
@@ -378,6 +344,7 @@ def _validate_plan(plan):
             raise FileNotFoundError(f"Source must be an existing absolute file: {path}")
         if edit.get("kind", "video") not in ("video", "image"):
             raise ValueError("Edit kind must be video or image")
+        validate_effects(edit.get("effects", {}), f"{edit.get('id', 'shot')} effects")
         reframe = edit.get("reframe", {})
         if reframe.get("mode", "auto") not in ("auto", "manual", "center", "contain"):
             raise ValueError("Reframe mode must be auto, manual, center or contain")
@@ -514,6 +481,14 @@ def render_project(plan, output_path, preview=False, cache_dir=None, protected_p
                          and speed_bounds(edit, edit["duration_frames"]/fps)[0] < 1-1e-5 else "none")
         signature = {k: edit.get(k) for k in ("kind", "source_start", "source_end", "duration_frames", "effects", "speed_points", "reframe", "action_anchor")}
         signature["interpolation"] = interpolation
+        pulse_frames = []
+        if effect_value(edit.get("effects"), "pulse"):
+            # Music projects keep beats on the output timeline; picture
+            # revisions never move the soundtrack, so local beats are exact.
+            first = int(edit["timeline_start_frame"])
+            pulse_frames = [int(beat) - first for beat in plan.get("beat_frames", [])
+                            if first <= int(beat) < first + int(edit["duration_frames"])]
+            signature["pulse_frames"] = pulse_frames
         signature.update(renderer=RENDER_VERSION, source_sha256=hashes[path], width=width, height=height, fps=fps, preview=bool(preview))
         key = hashlib.sha256(json.dumps(_canonical_cache_value(signature), sort_keys=True,
                                         separators=(",", ":"), allow_nan=False).encode()).hexdigest()
@@ -544,7 +519,8 @@ def render_project(plan, output_path, preview=False, cache_dir=None, protected_p
         else:
             temporary = cache/f"{key}.{uuid.uuid4().hex}.tmp.mp4"
             try:
-                tracking = _render_shot(edit, temporary, width, height, fps, preview, media_by_path[path], interpolation=interpolation)
+                tracking = _render_shot(edit, temporary, width, height, fps, preview, media_by_path[path],
+                                        interpolation=interpolation, pulse_frames=pulse_frames)
                 os.replace(temporary, shot)
                 from project_workspace import write_json
                 tracking.update(cache_signature=key, video_sha256=_file_digest(shot))

@@ -13,9 +13,9 @@ weights; it does not upload the recording. A local converted model plus
 recognizer for matching model/device/cache configurations.
 
 ```sh
-python edit_project.py speech-analyze interview.mp4 --transcript interview.srt -o analysis.json
-python edit_project.py speech-plan interview.mp4 --transcript analysis.json -o project.json --width 1080 --height 1920
-python edit_project.py render project.json -o short.mp4
+edit speech-analyze interview.mp4 --transcript interview.srt -o analysis.json
+edit speech-plan interview.mp4 --transcript analysis.json -o project.json --width 1080 --height 1920
+edit render project.json -o short.mp4
 ```
 
 `analysis.json` contains the source asset ID, stable segment/word IDs, candidate
@@ -27,7 +27,7 @@ observed. A long sentence is flagged rather than silently cut mid-thought.
 Select and reorder reviewed candidates explicitly:
 
 ```sh
-python edit_project.py speech-plan interview.mp4 --transcript analysis.json --select phrase-ONE phrase-TWO -o project.json --pause-limit 0.7 --padding 0.1
+edit speech-plan interview.mp4 --transcript analysis.json --select phrase-ONE phrase-TWO -o project.json --pause-limit 0.7 --padding 0.1
 ```
 
 Replace `phrase-ONE`/`phrase-TWO` with IDs in the report. `--pause-limit` retains
@@ -44,11 +44,11 @@ SRT/VTT retains actual cue times but cannot provide genuine per-word highlights.
 ## Correct, translate and export
 
 ```sh
-python edit_project.py speech-import project.json transcript.json --source-id asset-ID
-python edit_project.py speech-correct project.json --file corrections.json --glossary terminology.json
-python edit_project.py speech-translate project.json translations.json --language ru --mode bilingual
-python edit_project.py subtitles-export project.json -o bilingual.srt
-python edit_project.py subtitles-export project.json -o bilingual.vtt
+edit speech-import project.json transcript.json --source-id asset-ID
+edit speech-correct project.json --file corrections.json --glossary terminology.json
+edit speech-translate project.json translations.json --language ru --mode bilingual
+edit subtitles-export project.json -o bilingual.srt
+edit subtitles-export project.json -o bilingual.vtt
 ```
 
 `corrections.json` maps stable word or segment IDs to corrected text. Word edits
@@ -82,7 +82,7 @@ configured; these are output-timed captions, not source transcript metadata.
 ## B-roll with continuous speech
 
 ```sh
-python edit_project.py speech-broll project.json --shot speech-phrase-ID --media cutaway.mp4 --offset 1 --duration 2
+edit speech-broll project.json --shot speech-phrase-ID --media cutaway.mp4 --offset 1 --duration 2
 ```
 
 The insert replaces picture only and saves the original `audio_source` mapping.
@@ -96,9 +96,9 @@ insert or explicitly rebuild the retiming. No nonlinear curve is approximated.
 ## Gaps, targeted retries and batch work
 
 ```sh
-python edit_project.py speech-gaps project.json --min-gap 0.8 --threshold-db -40 -o gaps.json
-python edit_project.py speech-retry project.json --start 8.2 --end 11.4 --model small --language ru --model-dir work/models
-python edit_project.py speech-batch batch.json -o batch-analysis.json --model small --model-dir work/models
+edit speech-gaps project.json --min-gap 0.8 --threshold-db -40 -o gaps.json
+edit speech-retry project.json --start 8.2 --end 11.4 --model small --language ru --model-dir work/models
+edit speech-batch batch.json -o batch-analysis.json --model small --model-dir work/models
 ```
 
 Gap analysis finds untranscribed intervals with measurable energy; that energy
@@ -113,7 +113,7 @@ Retry updates transcript/candidates, not existing picture selections. To include
 newly recovered speech in the montage, rebuild from the updated project:
 
 ```sh
-python edit_project.py speech-plan interview.mp4 --transcript project.json -o revised-plan.json
+edit speech-plan interview.mp4 --transcript project.json -o revised-plan.json
 ```
 
 Batch format: `{"items":[{"id":"a","source":"a.mp4","transcript":"a.srt"},
@@ -142,9 +142,9 @@ renderer, and its inverse, so speed ramps do not cause captions or SFX to drift.
 Persist reusable action points and inspect anchor resolution:
 
 ```sh
-python edit_project.py action project.json --id landing --source-id asset-ID --time 2.75
-python edit_project.py anchor project.json --id highlight --spec '{"type":"action","id":"landing"}'
-python edit_project.py title project.json --text 'Landing' --duration 0.6 --anchor '{"type":"action","id":"landing"}'
+edit action project.json --id landing --source-id asset-ID --time 2.75
+edit anchor project.json --id highlight --spec '{"type":"action","id":"landing"}'
+edit title project.json --text 'Landing' --duration 0.6 --anchor '{"type":"action","id":"landing"}'
 ```
 
 Shell quoting differs across platforms; JSON revision/config files are the most

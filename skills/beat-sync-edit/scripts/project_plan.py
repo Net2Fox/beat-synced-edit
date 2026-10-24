@@ -13,13 +13,13 @@ import json
 import math
 from pathlib import Path, PureWindowsPath
 
-from edit_presets import get_preset
+from edit_effects import ACCENT_EFFECTS, GRADES, validate_effects
+from edit_presets import PRESETS, get_preset
 from editorial_feedback import explain_candidate, excluded_by_feedback, validate_preferences
 from music_structure import apply_overrides, segment_structure
 
 
 SECTION_NAMES = ("intro", "build", "drop", "outro")
-GRADES = ("none", "neutral", "cinematic", "cool", "vivid", "warm")
 
 
 def _number(value, name, minimum=None, maximum=None):
@@ -498,7 +498,9 @@ def build_plan(beatmap, library, duration=25, preset="cinematic", fps=30,
         recipe["beat_stride"][name] = _integer(value, "section_stride")
     if "grade" in config:
         recipe["effects"]["grade"] = config["grade"]
-    recipe["effects"].update(config.get("effects", {}))
+    recipe["effects"].update(validate_effects(config.get("effects") or {}, "effects override"))
+    validate_effects(recipe["effects"], f"{preset} preset effects")
+    accent_every = _integer(recipe.get("accent_every", 4), "accent_every")
     audio_path = config.get("audio_path") or beatmap.get("file") or beatmap.get("audio_file") or beatmap.get("source") or beatmap.get("path")
     if not _absolute(audio_path):
         raise ValueError("Provide an absolute audio_path (or beatmap.file)")
@@ -721,12 +723,17 @@ def build_plan(beatmap, library, duration=25, preset="cinematic", fps=30,
                         begin = max(available_start, proposed_start)
                         end = min(available_end, begin + span)
                         anchor = {"source_time": action, "output_fraction": action_fraction}
-            on_accent = section == "drop" and position in beat_frames and (not edits or position == next(item["start_frame"] for item in musical_sections if item["start_frame"] <= position < item["end_frame"]) or len(edits) % 4 == 0)
+            on_accent = section == "drop" and position in beat_frames and (not edits or position == next(item["start_frame"] for item in musical_sections if item["start_frame"] <= position < item["end_frame"]) or len(edits) % accent_every == 0)
             effects = deepcopy(recipe["effects"])
             if not on_accent:
-                effects["flash"] = 0.0
-                effects["shake"] = 0.0
-                effects["zoom"] = 1.0 + (effects["zoom"] - 1.0) * (.35 if section != "outro" else .15)
+                # Accents read as impact only when rare; looks (grade, grain,
+                # vignette, glow, letterbox) stay on every shot.
+                for name in ACCENT_EFFECTS + ("shake",):
+                    if name in effects:
+                        effects[name] = 0.0
+                effects["zoom"] = 1.0 + (effects.get("zoom", 1.0) - 1.0) * (.35 if section != "outro" else .15)
+            if section not in ("build", "drop") and "pulse" in effects:
+                effects["pulse"] = 0.0
             reframe = {"mode": config.get("reframe", "auto")}
             subject = config.get("subject") or clip.get("subject")
             if subject is not None:
@@ -900,12 +907,7 @@ def validate_plan(plan):
                 raise ValueError(f"{identifier}: slow motion is forbidden without an explicit user prompt and optical_flow interpolation")
             if slowest < min_speed - 1e-5 or fastest > max_speed + 1e-5:
                 raise ValueError(f"{identifier}: normalized speed curve violates min_speed/max_speed policy")
-        effects = edit.get("effects", {})
-        for effect in ("flash", "shake"):
-            _number(effects.get(effect, 0), effect, 0, 1)
-        _number(effects.get("zoom", 1), "zoom", 1, 4)
-        if effects.get("grade", "none") not in GRADES:
-            raise ValueError(f"Unknown grade; choose {GRADES}")
+        validate_effects(edit.get("effects", {}), f"{identifier} effects")
         reframe = edit.get("reframe", {})
         if reframe.get("mode", "auto") not in ("auto", "center", "manual", "contain"):
             raise ValueError("reframe.mode must be auto, center, manual, or contain")
@@ -948,7 +950,7 @@ def main(argv=None):
     parser.add_argument("library")
     parser.add_argument("-o", "--output", required=True)
     parser.add_argument("--duration", type=float, default=25)
-    parser.add_argument("--preset", choices=("cinematic", "car", "gaming", "product"), default="cinematic")
+    parser.add_argument("--preset", choices=tuple(PRESETS), default="cinematic")
     parser.add_argument("--fps", type=int, default=30)
     parser.add_argument("--width", type=int, default=1080)
     parser.add_argument("--height", type=int, default=1920)

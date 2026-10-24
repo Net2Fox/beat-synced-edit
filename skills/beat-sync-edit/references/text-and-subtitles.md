@@ -1,8 +1,8 @@
 # Titles and subtitles
 
-Use these commands with a saved version-2 project. The example PowerShell
-variables `$editPython` and `$editScripts` come from SKILL.md. Pass absolute
-paths for the project, media, fonts and outputs.
+Use these commands with a saved version-2 project. `edit` is the launcher from
+SKILL.md; `$work`/`$out` stand for absolute project work/output folders. Pass
+absolute paths for the project, media, fonts and outputs.
 
 Text is a separate project layer. Titles and captions are burned into preview
 and final MP4 after the picture is assembled. Text-only revisions reuse the
@@ -10,9 +10,9 @@ cached shots, preserve the soundtrack and keep the exact video duration.
 
 ## Titles
 
-```powershell
-& $editPython -X utf8 (Join-Path $editScripts 'edit_project.py') title 'C:/edit/work/project.json' --text 'Новый сезон' --start 0.2 --duration 2 --position top --animation fade
-& $editPython -X utf8 (Join-Path $editScripts 'edit_project.py') title 'C:/edit/work/project.json' --text 'Watch the full story' --start 20 --end 25 --position center --animation slide --color '#FFE34D'
+```sh
+edit title "$work/project.json" --text 'Новый сезон' --start 0.2 --duration 2 --position top --animation fade
+edit title "$work/project.json" --text 'Watch the full story' --start 20 --end 25 --position center --animation slide --color '#FFE34D'
 ```
 
 The project must be long enough for the requested range. Times are seconds in
@@ -21,11 +21,11 @@ for intentional compositions. Check their positions visually.
 
 ## Import, style and export captions
 
-```powershell
-& $editPython -X utf8 (Join-Path $editScripts 'edit_project.py') subtitles-import 'C:/edit/work/project.json' 'C:/edit/captions.srt' --preset boxed
-& $editPython -X utf8 (Join-Path $editScripts 'edit_project.py') text-style 'C:/edit/work/project.json' --track subtitles --position bottom --font-size 58 --max-lines 2 --margin 0.12 --background '#10151ECC'
-& $editPython -X utf8 (Join-Path $editScripts 'edit_project.py') subtitles-export 'C:/edit/work/project.json' -o 'C:/edit/outputs/captions.srt'
-& $editPython -X utf8 (Join-Path $editScripts 'edit_project.py') subtitles-export 'C:/edit/work/project.json' -o 'C:/edit/outputs/captions.vtt'
+```sh
+edit subtitles-import "$work/project.json" "$work/captions.srt" --preset boxed
+edit text-style "$work/project.json" --track subtitles --position bottom --font-size 58 --max-lines 2 --margin 0.12 --background '#10151ECC'
+edit subtitles-export "$work/project.json" -o "$out/captions.srt"
+edit subtitles-export "$work/project.json" -o "$out/captions.vtt"
 ```
 
 SRT and WebVTT are UTF-8, including BOM, Cyrillic and multiline text. Import
@@ -46,9 +46,9 @@ text into one multiline cue. Titles are available as a separate overlay layer.
 
 Install the optional speech packages in the skill environment only when needed:
 
-```powershell
-& $editPython -m pip install -r (Join-Path $skillRoot 'requirements-transcription.txt')
-& $editPython -X utf8 (Join-Path $editScripts 'edit_project.py') subtitles-transcribe 'C:/edit/work/project.json' --language ru --model small --preset karaoke --max-words 6 --max-chars 36 --max-duration 2.5
+```sh
+python3 <skillRoot>/scripts/bootstrap.py --transcription   # Windows: python <skillRoot>\scripts\bootstrap.py --transcription
+edit subtitles-transcribe "$work/project.json" --language ru --model small --preset karaoke --max-words 6 --max-chars 36 --max-duration 2.5
 ```
 
 Recognition uses Faster Whisper locally, with CPU/int8 by default. Audio is
@@ -62,7 +62,7 @@ the required CUDA libraries already installed.
 
 By default the tool transcribes only the soundtrack range used in the finished
 video, beginning at `audio.start`. It does not transcribe discarded source-clip
-audio. `--audio 'C:/edit/voice.wav' --audio-start 0` selects another aligned
+audio. `--audio "$work/voice.wav" --audio-start 0` selects another aligned
 recording; this supplies caption text and does not add or mix that recording
 into the video. Use `--offset` for alignment with the final soundtrack.
 
@@ -93,7 +93,7 @@ Presets set colors/background/highlighting and retain other existing settings.
 | Setting | Meaning |
 |---|---|
 | `--font` | Absolute TTF/OTF path. Defaults to an available system Unicode font. Choose a font covering the requested script. |
-| `--font-size`, `--stroke-width` | Pixels at the final output size; automatically scaled in previews. |
+| `--font-size`, `--stroke-width` | Pixels at the final output size; automatically scaled in previews. Scale with the output width: about 5–6% of width for captions (54–64 px at 1080 wide, 16 px at 270 wide). |
 | `--color`, `--stroke-color`, `--highlight-color` | `#RRGGBB` or `#RRGGBBAA`. |
 | `--background` | Hex color or `none`; supports translucent boxes. |
 | `--position` | `top`, `center`, `bottom`. |
@@ -124,7 +124,7 @@ voice or source sound; choosing an ASR input alone does not add an audio track.
 The preview review page includes a text selector, text field and start/end
 controls. It queues changes/removals and exports revision JSON. Apply that
 file with `edit_project.py revise`; saving a file from the page does not modify
-the project automatically. These operations also work through Codex:
+the project automatically. The editing agent can write the same operations:
 
 ```json
 [
@@ -152,8 +152,8 @@ Titles and subtitles stay at absolute output times when shots are reordered
 or retimed. Shift captions explicitly if the soundtrack alignment changes.
 After edits, render and inspect the preview and then the final MP4:
 
-```powershell
-& $editPython -X utf8 (Join-Path $editScripts 'edit_project.py') revise 'C:/edit/work/project.json' --operations 'C:/edit/work/text-changes.json'
-& $editPython -X utf8 (Join-Path $editScripts 'edit_project.py') preview 'C:/edit/work/project.json' -o 'C:/edit/work/preview.mp4'
-& $editPython -X utf8 (Join-Path $editScripts 'edit_project.py') render 'C:/edit/work/project.json' -o 'C:/edit/outputs/final.mp4'
+```sh
+edit revise "$work/project.json" --operations "$work/text-changes.json"
+edit preview "$work/project.json" -o "$work/preview.mp4"
+edit render "$work/project.json" -o "$out/final.mp4"
 ```

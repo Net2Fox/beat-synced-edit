@@ -1,0 +1,16 @@
+#!/bin/sh
+# Run the beat-sync-edit CLI with the skill's own .venv; needs no shell state.
+#   edit COMMAND [ARGS...]          -> edit_project.py COMMAND ...
+#   edit tool TOOL.py [ARGS...]     -> a bundled helper such as beat_map.py
+# BEAT_SYNC_PYTHON overrides the interpreter.
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+case "$(basename -- "$here")" in
+  scripts) root=$(dirname -- "$here") ;;
+  *) root=$here ;;
+esac
+python=${BEAT_SYNC_PYTHON:-"$root/.venv/bin/python"}
+if [ -z "${BEAT_SYNC_PYTHON:-}" ] && [ ! -x "$python" ]; then
+  echo "beat-sync-edit: no environment at $root/.venv. Run: python3 \"$here/bootstrap.py\"" >&2
+  exit 3
+fi
+exec "$python" -X utf8 "$here/edit_project.py" "$@"
