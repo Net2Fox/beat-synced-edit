@@ -139,11 +139,10 @@ voice); source anchors default to picture and accept `domain: "speech"`.
 Source/output conversion uses the same raised-cosine integral/action warp as the
 renderer, and its inverse, so speed ramps do not cause captions or SFX to drift.
 
-Persist reusable action points and inspect anchor resolution:
+Persist reusable action points and anchor titles to them:
 
 ```sh
 python edit_project.py action project.json --id landing --source-id asset-ID --time 2.75
-python edit_project.py anchor project.json --id highlight --spec '{"type":"action","id":"landing"}'
 python edit_project.py title project.json --text 'Landing' --duration 0.6 --anchor '{"type":"action","id":"landing"}'
 ```
 

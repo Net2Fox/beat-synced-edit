@@ -6,7 +6,7 @@ from pathlib import Path
 
 from project_workspace import read_json, write_json
 
-WORKFLOW_COMMANDS = {"verify", "review-export", "batch-render", "batch-analyze"}
+WORKFLOW_COMMANDS = {"verify", "review-export", "batch-render"}
 
 
 def register_workflow_commands(sub):
@@ -22,11 +22,6 @@ def register_workflow_commands(sub):
     batch.add_argument("manifest", help='JSON {"jobs":[{"project":"...","output":"...","preview":false}]}')
     batch.add_argument("--work", required=True)
     batch.add_argument("--continue-on-error", action="store_true")
-    analyze = sub.add_parser("batch-analyze", help="Analyze inputs as one reusable library for multiple edits")
-    analyze.add_argument("inputs", nargs="+")
-    analyze.add_argument("--work", required=True)
-    analyze.add_argument("--annotations")
-    analyze.add_argument("-o", "--output")
 
 
 def render_with_qa(plan, output, preview=False, cache_dir=None, qa_dir=None, project_path=None):
@@ -92,15 +87,6 @@ def run_workflow_command(args):
             raise ValueError("Review report cannot overwrite the video")
         write_json(destination, result)
         return {"report": str(Path(destination).resolve()), **{k: result[k] for k in ("visual_review", "editorial_review", "playback_review")}}
-    if args.command == "batch-analyze":
-        from media_library import analyze_library
-        work = Path(args.work).resolve()
-        work.mkdir(parents=True, exist_ok=True)
-        library = analyze_library(args.inputs, str(work), annotations_path=args.annotations)
-        output = Path(args.output).resolve() if args.output else work / "library.json"
-        write_json(output, library)
-        return {"library": str(output), "assets": len(library["assets"]), "clips": len(library["clips"]),
-                "analysis_cache": library.get("analysis_cache"), "semantic_review": library.get("semantic_review")}
     if args.command == "batch-render":
         from project_plan import validate_plan
         manifest = Path(args.manifest).resolve()

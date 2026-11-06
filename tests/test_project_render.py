@@ -1,6 +1,5 @@
 """Renderer integration tests use actual FFmpeg and generated, rights-free media."""
 import copy
-import json
 from pathlib import Path
 import shutil
 import subprocess

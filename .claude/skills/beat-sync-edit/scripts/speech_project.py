@@ -4,14 +4,13 @@ No text is translated or guessed by this module. Sentence completeness is a
 punctuation heuristic and every candidate retains an explicit review status.
 """
 from copy import deepcopy
-from datetime import datetime, timezone
 import hashlib
 import math
 from pathlib import Path
 import re
 
 from subtitle_tools import _join_words, _coalesce_words
-from timeline_map import inverse_source_times, mapping_edit, source_matches, refresh_anchors
+from timeline_map import inverse_source_times, mapping_edit, source_matches
 
 SPEECH_OPERATIONS = {"speech_transcript", "speech_correct", "speech_translate", "speech_captions",
                      "speech_broll", "anchor_set", "action_set", "speech_retry_result"}

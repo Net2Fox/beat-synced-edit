@@ -29,6 +29,17 @@ class TextCommandTests(unittest.TestCase):
     def invoke(self, *args):
         return run_text_command(self.parser.parse_args(list(map(str, args))))
 
+    def test_title_accepts_inline_anchor_json_through_the_cli(self):
+        import json
+        from edit_project import parser, run
+        shot = self.plan["edits"][0]["id"]
+        anchor = json.dumps({"type": "shot", "id": shot})
+        output = self.root / "anchored.json"
+        run(parser().parse_args(["title", str(self.project), "--text", "Hi", "--anchor", anchor,
+                                 "--duration", "0.5", "-o", str(output)]))
+        title = json.loads(output.read_text(encoding="utf-8"))["titles"][-1]
+        self.assertEqual(title["anchor"]["id"], shot)
+
     def test_project_output_cannot_overwrite_any_source(self):
         for source in [self.plan["audio"]["path"], *[a["path"] for a in self.plan["assets"]]]:
             with self.subTest(source=source), self.assertRaisesRegex(ValueError, "overwrite"):
@@ -49,7 +60,7 @@ class TextCommandTests(unittest.TestCase):
         with patch("text_commands.subprocess.run") as extract:
             for path in protected:
                 with self.subTest(path=path), self.assertRaisesRegex(ValueError, "overwrite"):
-                    self.invoke("transcribe", self.project, "--audio", self.audio,
+                    self.invoke("subtitles-transcribe", self.project, "--audio", self.audio,
                                 "--transcript", path, "-o", output)
             extract.assert_not_called()
         self.assertEqual(self.audio.read_bytes(), b"original speech")
@@ -59,7 +70,7 @@ class TextCommandTests(unittest.TestCase):
         with patch("text_commands.subprocess.run") as extract, patch("speech_transcribe.transcribe_audio") as recognize:
             extract.return_value.returncode = 0
             recognize.return_value = {"segments": [], "audio_path": "temporary.wav", "language": "en"}
-            result = self.invoke("transcribe", self.project, "--audio", self.audio)
+            result = self.invoke("subtitles-transcribe", self.project, "--audio", self.audio)
         self.assertEqual(result["status"], "no_speech")
         self.assertEqual(self.project.read_bytes(), before)
         import json
@@ -82,7 +93,7 @@ class TextCommandTests(unittest.TestCase):
             return {"segments": [], "language": "en"}
 
         with patch("speech_transcribe.transcribe_audio", side_effect=check_audio):
-            self.invoke("transcribe", self.project)
+            self.invoke("subtitles-transcribe", self.project)
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from project_workspace import apply_revisions, read_json, revise_file, write_json
+from project_workspace import apply_revisions, revise_file, write_json
 from test_project_workspace import fixture
 
 

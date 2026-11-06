@@ -9,7 +9,7 @@ import unittest
 
 import numpy as np
 
-from audio_mix import (SAMPLE_RATE as SR, decode_audio, duck_envelope, encoded_audio_report,
+from audio_mix import (SAMPLE_RATE as SR, decode_audio, encoded_audio_report,
                        expanded_tracks, mix_project_audio, retime_source, validate_audio_mix, write_audio)
 
 

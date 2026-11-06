@@ -8,7 +8,7 @@ import unittest
 from graphics_commands import motion_project
 from project_workspace import write_json
 from project_render import render_project
-from render_qa import guard_export_outputs, verify_export
+from render_qa import verify_export
 from workflow_commands import render_with_qa
 
 

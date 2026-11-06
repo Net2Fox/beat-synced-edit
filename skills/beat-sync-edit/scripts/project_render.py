@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Frame-exact project renderer with smooth retiming and reusable shot caches.
 
 The project is a JSON version-2 plan. FFmpeg handles oriented, square-pixel
@@ -7,7 +6,6 @@ and effects. Explicitly authorized slow motion uses optical-flow interpolation.
 """
 from __future__ import annotations
 
-import argparse
 from copy import deepcopy
 import hashlib
 import json
@@ -22,7 +20,7 @@ import uuid
 import cv2
 import numpy as np
 
-from text_overlay import TextCompositor, validate_text_tracks
+from text_overlay import validate_text_tracks
 
 RENDER_VERSION = 3
 
@@ -64,9 +62,7 @@ def _ratio(value, default=1.0):
         return default
 
 
-# Public reexports preserve the original renderer API while every subsystem
-# uses the same time mapping implementation.
-from timeline_map import _integrated_speed, _anchor_warp, source_times
+from timeline_map import source_times
 
 
 def _display_size(stream):
@@ -597,21 +593,3 @@ def render_project(plan, output_path, preview=False, cache_dir=None, protected_p
             "audio_loudness": audio_report["encoded_measurements"],
             "preview": bool(preview), "cache_hits": cache_hits, "shots": len(shots),
             "tracking": tracking_reports, "fonts": font_report}
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("project", type=Path)
-    parser.add_argument("-o", "--output", type=Path, required=True)
-    parser.add_argument("--preview", action="store_true")
-    parser.add_argument("--cache-dir", type=Path)
-    args = parser.parse_args()
-    try:
-        result = render_project(args.project, args.output, args.preview, args.cache_dir)
-    except (ValueError, RuntimeError, FileNotFoundError) as exc:
-        parser.exit(1, f"Error: {exc}\n")
-    print(json.dumps(result, indent=2))
-
-
-if __name__ == "__main__":
-    main()

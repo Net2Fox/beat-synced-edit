@@ -1,6 +1,5 @@
 """Public local transcript, speech montage, B-roll and anchor workflows."""
 import argparse
-from copy import deepcopy
 import hashlib
 import json
 import math
@@ -12,10 +11,10 @@ import numpy as np
 
 from project_workspace import read_json, write_json, revise_file
 from speech_project import (normalize_transcript, import_transcript, phrase_candidates,
-                            build_speech_plan, refresh_source_captions, recognized_intervals)
+                            build_speech_plan, recognized_intervals)
 
 SPEECH_COMMANDS = {"speech-analyze", "speech-plan", "speech-import", "speech-correct", "speech-translate",
-                  "speech-captions", "speech-broll", "speech-gaps", "speech-retry", "speech-batch", "anchor", "action"}
+                  "speech-captions", "speech-broll", "speech-gaps", "speech-retry", "speech-batch", "action"}
 
 
 def _asr_args(parser):
@@ -73,9 +72,6 @@ def register_speech_commands(sub):
     p = sub.add_parser("speech-batch", help="Analyze local recordings with one reused recognizer per model configuration")
     p.add_argument("manifest", help="JSON {items:[{id,source,transcript?}]}; relative paths resolve beside manifest")
     p.add_argument("-o", "--output", required=True, help="Analysis JSON report"); _asr_args(p)
-    p = sub.add_parser("anchor", help="Persist a source/word/beat/event/shot/action anchor and its resolution")
-    p.add_argument("project"); p.add_argument("--id", required=True); p.add_argument("--spec", required=True, help="Anchor JSON object")
-    p.add_argument("-o", "--output")
     p = sub.add_parser("action", help="Persist a named source action usable by titles, graphics and audio")
     p.add_argument("project"); p.add_argument("--id", required=True); p.add_argument("--source-id", required=True)
     p.add_argument("--time", type=float, required=True); p.add_argument("-o", "--output")
@@ -279,8 +275,6 @@ def run_speech_command(args):
                 word["id"] = f"{segment['id']}-w{word_index+1}"
         operation = {"op": "speech_retry_result", "transcript_id": transcript["id"], "start": args.start,
                      "end": args.end, "transcript": incoming}
-    elif command == "anchor":
-        operation = {"op": "anchor_set", "value": {"id": args.id, "anchor": json.loads(args.spec)}}
     elif command == "action":
         operation = {"op": "action_set", "value": {"id": args.id, "source_id": args.source_id, "time": args.time}}
     if operation is None:

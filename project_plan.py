@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Plan exact-frame, beat-aware edits from a portable media library.
 
 No source interval is repeated without explicit consent. Musical section guesses
@@ -6,10 +5,8 @@ are inspectable and may be replaced by manual sections in seconds or frames.
 This module is deliberately independent of video/ML dependencies.
 """
 
-import argparse
 import bisect
 from copy import deepcopy
-import json
 import math
 from pathlib import Path, PureWindowsPath
 
@@ -424,10 +421,6 @@ def _clip_explanation(clip, section, recipe, selected, recent, requested_tags, s
         if str(previous["asset_id"]) == str(clip["asset_id"]):
             components["source_diversity"] -= .3
     return explain_candidate(clip, sum(components.values()), components, profile, query)
-
-
-def _clip_score(clip, section, recipe, selected, recent, requested_tags, slot_index):
-    return _clip_explanation(clip, section, recipe, selected, recent, requested_tags, slot_index)["score"]
 
 
 def build_plan(beatmap, library, duration=25, preset="cinematic", fps=30,
@@ -888,7 +881,7 @@ def validate_plan(plan):
         anchor = edit.get("action_anchor")
         if anchor:
             action = _number(anchor.get("source_time"), "action source_time", begin, end)
-            fraction = _number(anchor.get("output_fraction"), "action output_fraction", .0001, .9999)
+            _number(anchor.get("output_fraction"), "action output_fraction", .0001, .9999)
             if action <= begin or action >= end:
                 raise ValueError("Action anchor must be strictly inside its source interval")
         if kind == "video":
@@ -937,58 +930,3 @@ def validate_plan(plan):
         from text_overlay import validate_text_tracks
         validate_text_tracks(plan)
     return plan
-
-
-def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("beatmap")
-    parser.add_argument("library")
-    parser.add_argument("-o", "--output", required=True)
-    parser.add_argument("--duration", type=float, default=25)
-    parser.add_argument("--preset", choices=("cinematic", "car", "gaming", "product"), default="cinematic")
-    parser.add_argument("--fps", type=int, default=30)
-    parser.add_argument("--width", type=int, default=1080)
-    parser.add_argument("--height", type=int, default=1920)
-    parser.add_argument("--audio-start", type=float)
-    parser.add_argument("--audio-path")
-    parser.add_argument("--allow-repeats", action="store_true")
-    parser.add_argument("--shortage", choices=("extend", "error", "repeat"), default="extend")
-    parser.add_argument("--min-speed", type=float)
-    parser.add_argument("--slow-motion-prompt", default="", help="Exact user request explicitly authorizing interpolated slow motion")
-    parser.add_argument("--interpolation", choices=("none", "optical_flow"), default="none")
-    parser.add_argument("--max-speed", type=float, default=4)
-    parser.add_argument("--beat-stride", type=int)
-    parser.add_argument("--section-stride", action="append", default=[], metavar="NAME=N")
-    parser.add_argument("--min-shot", type=float)
-    parser.add_argument("--max-shot", type=float)
-    parser.add_argument("--sections", help="JSON list of relative music section boundaries")
-    parser.add_argument("--tags", nargs="*", default=[])
-    parser.add_argument("--exclude", nargs="*", default=[])
-    parser.add_argument("--reframe", choices=("auto", "center", "manual", "contain"), default="auto")
-    parser.add_argument("--subject", nargs=4, type=float, metavar=("X", "Y", "W", "H"))
-    parser.add_argument("--grade", choices=GRADES)
-    args = parser.parse_args(argv)
-    config = {key: getattr(args, key) for key in ("shortage", "min_speed", "max_speed", "tags", "exclude", "reframe", "slow_motion_prompt", "interpolation")}
-    for key in ("audio_path", "subject", "grade", "beat_stride", "min_shot", "max_shot"):
-        if getattr(args, key) is not None:
-            config[key] = getattr(args, key)
-    config["section_stride"] = {}
-    for spec in args.section_stride:
-        try:
-            name, number = spec.split("=", 1)
-            config["section_stride"][name] = int(number)
-        except ValueError as exc:
-            raise ValueError("--section-stride expects NAME=N, for example drop=1") from exc
-    manual = json.loads(Path(args.sections).read_text(encoding="utf-8")) if args.sections else None
-    plan = build_plan(json.loads(Path(args.beatmap).read_text(encoding="utf-8")),
-                      json.loads(Path(args.library).read_text(encoding="utf-8")),
-                      args.duration, args.preset, args.fps, args.width, args.height,
-                      args.audio_start, args.allow_repeats, manual, **config)
-    destination = Path(args.output)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"Saved {len(plan['edits'])} shots, {plan['duration_frames']} frames, {plan['duration']:.3f}s to {destination}")
-
-
-if __name__ == "__main__":
-    main()

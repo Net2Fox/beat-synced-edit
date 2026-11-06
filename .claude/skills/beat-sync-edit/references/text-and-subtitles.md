@@ -124,7 +124,7 @@ voice or source sound; choosing an ASR input alone does not add an audio track.
 The preview review page includes a text selector, text field and start/end
 controls. It queues changes/removals and exports revision JSON. Apply that
 file with `edit_project.py revise`; saving a file from the page does not modify
-the project automatically. These operations also work through Codex:
+the project automatically. You can also write the operations yourself:
 
 ```json
 [

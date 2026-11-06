@@ -141,6 +141,7 @@ def run(args):
         return {"library": str(output), "assets": len(result["assets"]), "clips": len(result["clips"]),
                 "contact_sheet": result.get("contact_sheet"),
                 "contact_sheets": result.get("contact_sheets", []),
+                "analysis_cache": result.get("analysis_cache"),
                 "next": "Inspect contact sheets and annotate subject tags, shot types and actions before planning."}
     if args.command == "annotate":
         from media_library import apply_annotations

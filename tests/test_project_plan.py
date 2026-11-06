@@ -1,8 +1,6 @@
 """Behavioral coverage for exact duration, consent, musical structure and selection."""
 
 from copy import deepcopy
-from contextlib import redirect_stdout
-import io
 import json
 from pathlib import Path
 import sys
@@ -298,9 +296,8 @@ class SlowMotionPolicyTests(unittest.TestCase):
         self.assertLessEqual(max(shot["source_end"] for shot in plan["edits"]), 3 - 1 / 30 + 1e-7)
         self.assertEqual(plan["clips"][0]["end"], 3)
 
-    def test_both_planning_clis_preserve_explicit_prompt_and_safe_default(self):
+    def test_plan_cli_preserves_explicit_prompt_and_safe_default(self):
         from edit_project import parser, run
-        from project_plan import main
         beatmap, library = inputs()
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -309,18 +306,11 @@ class SlowMotionPolicyTests(unittest.TestCase):
             media.write_text(json.dumps(library), encoding="utf-8")
             for authorized in (False, True):
                 flags = ["--slow-motion-prompt", SLOW_REQUEST["slow_motion_prompt"], "--interpolation", "optical_flow"] if authorized else []
-                for unified in (False, True):
-                    output = root / f"project-{authorized}-{unified}.json"
-                    common = ["--duration", "5", "-o", str(output), *flags]
-                    if unified:
-                        run(parser().parse_args(["plan", "--library", str(media), "--beats", str(music), *common]))
-                    else:
-                        with redirect_stdout(io.StringIO()):
-                            main([str(music), str(media), *common])
-                    plan = json.loads(output.read_text(encoding="utf-8"))
-                    self.assertEqual(plan["policies"]["allow_slow_motion"], authorized)
-                    self.assertEqual(plan["policies"]["min_speed"], .5 if authorized else 1)
-
+                output = root / f"project-{authorized}.json"
+                run(parser().parse_args(["plan", "--library", str(media), "--beats", str(music), "--duration", "5", "-o", str(output), *flags]))
+                plan = json.loads(output.read_text(encoding="utf-8"))
+                self.assertEqual(plan["policies"]["allow_slow_motion"], authorized)
+                self.assertEqual(plan["policies"]["min_speed"], .5 if authorized else 1)
 
 if __name__ == "__main__":
     unittest.main()

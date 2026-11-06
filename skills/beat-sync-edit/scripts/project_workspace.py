@@ -306,7 +306,7 @@ button{cursor:pointer}button:hover{background:#315170}label{display:block;margin
 #shots{display:flex;flex-wrap:wrap;gap:6px;margin:18px 0}#shots button{font-size:13px}
 textarea{width:95%;height:180px;font:13px monospace}.muted{color:#a6b8cf}#status{min-height:24px;color:#8bd9b1}
 @media(max-width:750px){main{display:block}}</style>
-<h1>Beat-Sync Edit · Review</h1><p class="muted">Select a shot to inspect it. Queue changes and download the revision file, or describe your changes to Codex.</p>
+<h1>Beat-Sync Edit · Review</h1><p class="muted">Select a shot to inspect it. Queue changes and download the revision file, or describe your changes to your agent (Claude Code or Codex).</p>
 <main><section><video id="player" controls preload="metadata" src="VIDEO"></video><div id="shots"></div></section>
 <section><label for="shot">Shot</label><select id="shot"></select><p id="details" class="muted"></p>
 <label for="replacement">Replacement clip</label><select id="replacement"></select><button id="replace">Queue replacement</button>
@@ -318,7 +318,7 @@ textarea{width:95%;height:180px;font:13px monospace}.muted{color:#a6b8cf}#status
 <label for="cuestart">Start / end (seconds)</label><input id="cuestart" type="number" min="0" step="0.01"><input id="cueend" type="number" min="0" step="0.01">
 <p><button id="textsave">Queue text change</button> <button id="textremove">Remove text cue</button></p></details>
 <label for="operations">Queued revisions</label><textarea id="operations" readonly>[]</textarea><p id="status" role="status"></p>
-<p class="muted">Changes apply on the next render. Give revisions.json to Codex, or run:<br><code>edit_project.py revise project.json --operations revisions.json</code><br>Then render a new preview.</p></section></main>
+<p class="muted">Changes apply on the next render. Give revisions.json to your agent, or run:<br><code>edit_project.py revise project.json --operations revisions.json</code><br>Then render a new preview.</p></section></main>
 <script>const data=DATA,player=document.getElementById('player'),shot=document.getElementById('shot'),queue=[];
 const el=id=>document.getElementById(id),add=op=>{queue.push(op);el('operations').value=JSON.stringify(queue,null,2);el('status').textContent='Change queued. Download revisions to apply.'};
 data.edits.forEach((e,i)=>{let o=new Option(`${i+1}. ${e.id} · ${e.section}`,e.id);shot.add(o);let b=document.createElement('button');b.textContent=`${i+1} · ${(e.duration_frames/data.fps).toFixed(2)}s`;b.onclick=()=>{shot.value=e.id;selectShot(true)};el('shots').append(b)});

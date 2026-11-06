@@ -1,8 +1,5 @@
-#!/usr/bin/env python3
 """Track an explicit subject or use labelled face/motion fallbacks for reframing."""
 
-import argparse
-import json
 import math
 from pathlib import Path
 
@@ -227,23 +224,3 @@ def track_subject(path, start, end, subject=None, sample_fps=5):
     if not records:
         raise ValueError(f"No frames could be tracked: {path}")
     return _smooth(records)
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("source")
-    parser.add_argument("--start", type=float, default=0)
-    parser.add_argument("--end", type=float, required=True)
-    parser.add_argument("--subject", nargs=4, type=float, metavar=("X", "Y", "W", "H"))
-    parser.add_argument("--sample-fps", type=float, default=5)
-    parser.add_argument("-o", "--output", required=True)
-    args = parser.parse_args()
-    records = track_subject(args.source, args.start, args.end, args.subject, args.sample_fps)
-    target = Path(args.output).resolve()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(records, indent=2) + "\n", encoding="utf-8")
-    print(f"Saved {len(records)} camera keyframes to {target}")
-
-
-if __name__ == "__main__":
-    main()

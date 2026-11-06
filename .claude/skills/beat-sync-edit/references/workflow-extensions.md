@@ -127,8 +127,8 @@ prove a human/agent actually watched. Do not invent those observations.
 
 ## Batch reuse and input-bound execution
 
-`batch-analyze input-directory --work analysis` produces one library reusable
-by multiple plans. Content-addressed analysis skips unchanged source decoding,
+One `analyze input-directory --work analysis` library can feed several plans.
+Content-addressed analysis skips unchanged source decoding,
 while annotations are reapplied. `batch-render jobs.json --work batch` reuses
 a common shot cache, records each job and runs export QA. Optional
 `--continue-on-error` attempts the remaining jobs; any failed job gives a failing

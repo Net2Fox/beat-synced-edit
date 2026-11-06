@@ -12,7 +12,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from timeline_map import source_times, inverse_source_times, source_to_output, output_to_source, resolve_anchor
 from speech_project import normalize_transcript, import_transcript, phrase_candidates, build_speech_plan, refresh_source_captions
-from project_workspace import apply_revisions, write_json
+from project_workspace import apply_revisions
 from subtitle_tools import export_subtitles
 
 

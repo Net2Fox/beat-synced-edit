@@ -1,11 +1,9 @@
-#!/usr/bin/env python3
 """Persistent mixed-media ingestion and reviewable scene metadata.
 
 Semantic annotations are supplied by the editor after viewing contact sheets.
 The automatic pass measures image properties; it does not guess object labels.
 """
 
-import argparse
 from copy import deepcopy
 import hashlib
 import json
@@ -400,22 +398,3 @@ def analyze_library(inputs, work_dir, annotations_path=None, cache_dir=None):
               "semantic_review": "complete" if all(clip["semantic_source"] == "annotation" for clip in clips) else "needed"}
     (work / "library.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return result
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("inputs", nargs="+", help="Video/image files, folders or ZIP archives")
-    parser.add_argument("--work-dir", required=True)
-    parser.add_argument("--annotations", help="JSON observations keyed by contact-sheet clip id")
-    parser.add_argument("-o", "--output", help="Optional additional library JSON path")
-    args = parser.parse_args()
-    result = analyze_library(args.inputs, args.work_dir, args.annotations)
-    if args.output:
-        path = Path(args.output).resolve()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({"assets": len(result["assets"]), "clips": len(result["clips"]), "contact_sheets": result["contact_sheets"]}, ensure_ascii=False))
-
-
-if __name__ == "__main__":
-    main()

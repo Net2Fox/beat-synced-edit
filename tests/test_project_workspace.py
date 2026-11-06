@@ -1,7 +1,6 @@
 """Observable revision behavior: atomicity, timing preservation and safe review pages."""
 
 import copy
-import json
 from pathlib import Path
 import sys
 import tempfile

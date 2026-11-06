@@ -3,7 +3,6 @@
 Source intervals are half open. Mapping endpoints is allowed for cue boundaries.
 The inverse solves the exact monotone render curve, not a linear approximation.
 """
-from copy import deepcopy
 import math
 import numpy as np
 

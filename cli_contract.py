@@ -3,11 +3,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import os
 from pathlib import Path
 import platform
-import sys
 
 from project_workspace import read_json, write_json
 from render_qa import file_hash
@@ -17,7 +15,7 @@ PLAN_SCHEMA = "beat-sync.execution-plan.v1"
 OUTPUT_KEYS = {"output", "work", "cache", "html", "download_root", "model_dir", "beats_output", "render", "plan_file"}
 INPUT_KEYS = {"project", "library", "beats", "audio", "media", "video", "source", "file", "spec", "inputs", "manifest",
               "annotations", "operations", "config", "layers", "keyframes", "sections", "words", "transcript", "translations",
-              "glossary", "preferences", "music_overrides", "feedback", "candidates", "segments", "corrections", "report", "observations", "beatmap", "profile", "overrides", "font", "anchor"}
+              "glossary", "preferences", "music_overrides", "feedback", "candidates", "segments", "corrections", "report", "observations", "beatmap", "profile", "overrides", "font"}
 PATH_KEYS = {"source", "path", "font", "library", "beatmap", "project", "transcript", "words_path", "file", "audio_path", "render"}
 
 
@@ -100,7 +98,7 @@ def fingerprint_inputs(args, hash_files=True):
             if local.exists() or local.is_absolute() or str(value).startswith((".", "~")):
                 visit(local, required=True)
             continue
-        if key == "transcript" and getattr(args, "command", None) in ("transcribe", "subtitles-transcribe"):
+        if key == "transcript" and getattr(args, "command", None) == "subtitles-transcribe":
             continue
         if key == "profile" and getattr(args, "command", None) == "feedback" and value and not Path(value).exists():
             continue
@@ -118,7 +116,7 @@ def guard_command_outputs(args):
     protected = {Path(p) for p in fingerprint_inputs(args, hash_files=False)["files"]}
     revision_commands = {"revise", "title", "text-style", "subtitles-import", "subtitles-transcribe", "audio-config",
                          "speech-import", "speech-correct", "speech-translate", "speech-captions", "speech-broll", "speech-retry",
-                         "anchor", "action", "style", "graphics", "graphics-remove", "reframe-keyframes"}
+                         "action", "style", "graphics", "graphics-remove", "reframe-keyframes"}
     allowed = set()
     if args.command in revision_commands and getattr(args, "project", None):
         allowed.add(Path(args.project).resolve())
