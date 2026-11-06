@@ -154,6 +154,7 @@ def build_speech_plan(asset, transcript, selected=None, fps=30, width=1080, heig
         chosen = candidates
     if not chosen:
         raise ValueError("No speech candidates to plan")
+    chosen_ids = {c["id"] for c in chosen}
     ranges = []
     for i, candidate in enumerate(chosen):
         begin, end = max(0, candidate["start"]-padding), min(asset["duration"], candidate["end"]+padding)
@@ -162,10 +163,27 @@ def build_speech_plan(asset, transcript, selected=None, fps=30, width=1080, heig
             gap = chosen[i+1]["start"]-candidate["end"]
             preserve = gap if pause_limit is None else min(gap, pause_limit)
             end = min(asset["duration"], max(end, candidate["end"]+preserve))
+        # Padding and kept pauses never reach into a phrase that was left out,
+        # or its words and caption would play. --keep-pauses (pause_limit None)
+        # deliberately keeps everything up to the next selected phrase.
+        skipped_after = skipped_before = None
+        if pause_limit is not None:
+            skipped_after = min((c["start"] for c in candidates if c["id"] not in chosen_ids
+                                 and c["start"] >= candidate["end"]), default=None)
+            skipped_before = max((c["end"] for c in candidates if c["id"] not in chosen_ids
+                                  and c["end"] <= candidate["start"]), default=None)
+            if skipped_after is not None:
+                end = min(end, max(candidate["end"], skipped_after))
+            if skipped_before is not None:
+                begin = max(begin, min(candidate["start"], skipped_before))
         if ranges and candidate["start"] >= chosen[i-1]["end"]:
             begin = max(begin, ranges[-1][1]/fps)
         first = max(0, math.floor(begin*fps))
         last = min(math.floor(asset["duration"]*fps), math.ceil(end*fps))
+        if skipped_after is not None:
+            last = min(last, max(math.floor(skipped_after*fps), math.ceil(candidate["end"]*fps)))
+        if skipped_before is not None:
+            first = max(first, min(math.ceil(skipped_before*fps), math.floor(candidate["start"]*fps)))
         if ranges and candidate["start"] >= chosen[i-1]["end"]:
             first = max(first, ranges[-1][1])
         if last <= first:

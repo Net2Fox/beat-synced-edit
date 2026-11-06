@@ -27,14 +27,12 @@ class InputCoverageTests(unittest.TestCase):
         overrides.write_text('{"mode":"beat_cut"}')
         self.assertNotEqual(before, fingerprint_inputs(args))
 
-    def test_candidate_model_and_explicit_font_are_bound(self):
-        model = self.root/"model.json"
+    def test_explicit_font_is_bound(self):
         font = self.root/"font.ttf"
-        write_json(model, {"weights": [1, 2]})
         font.write_bytes(b"font-content")
-        args = Namespace(command="candidates", model=str(model), font=str(font))
+        args = Namespace(command="title", font=str(font))
         result = fingerprint_inputs(args)
-        self.assertEqual(set(result["files"]), {str(model), str(font)})
+        self.assertEqual(set(result["files"]), {str(font)})
         font.write_bytes(b"changed-font")
         self.assertNotEqual(result, fingerprint_inputs(args))
 

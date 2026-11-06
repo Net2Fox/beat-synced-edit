@@ -8,6 +8,7 @@ local_files_only=True to run without model downloads.
 
 import math
 from pathlib import Path
+import sys
 
 _MODEL_CACHE = {}
 
@@ -40,10 +41,9 @@ def transcribe_audio(audio_path, model="small", language=None, device="cpu",
     try:
         from faster_whisper import WhisperModel
     except ImportError as exc:
+        requirements = Path(__file__).resolve().parents[1] / "requirements-transcription.txt"
         raise RuntimeError("Automatic subtitles require the optional faster-whisper package. "
-                           "Install into the skill's Python environment with: "
-                           "python -m pip install -r requirements-transcription.txt "
-                           "(or python -m pip install 'faster-whisper>=1.1,<2' 'av>=11,<19'). "
+                           f'Install it with: "{sys.executable}" -m pip install -r "{requirements}". '
                            "Manual titles and SRT/VTT import do not require this package.") from exc
     model_options = {"device": device, "compute_type": compute_type}
     if model_dir is not None:

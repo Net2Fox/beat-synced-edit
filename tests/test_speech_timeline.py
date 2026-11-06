@@ -63,6 +63,20 @@ class SpeechProjectTests(unittest.TestCase):
         p = build_speech_plan(self.plan["assets"][0], self.plan["speech"]["transcripts"][0], pause_limit=.5, padding=0)
         self.assertEqual(p["duration"], 4.5)
 
+    def test_selection_never_plays_part_of_a_skipped_phrase(self):
+        asset = {"id": "speech-source", "path": self.plan["assets"][0]["path"], "kind": "video", "duration": 8,
+                 "width": 320, "height": 180, "has_audio": True}
+        cues = [(0.3, 1.8, "First point."), (2.0, 3.6, "Skip this one."), (4.0, 5.5, "Third point."), (5.9, 7.6, "Last point.")]
+        transcript = normalize_transcript({"segments": [{"start": s, "end": e, "text": t} for s, e, t in cues]}, asset["id"])
+        ids = [c["id"] for c in phrase_candidates(transcript)]
+        chosen = [ids[0], ids[2], ids[3]]
+        plan = build_speech_plan(asset, transcript, chosen, fps=30, width=180, height=320)
+        self.assertEqual([s["text"] for s in plan["subtitles"]], ["First point.", "Third point.", "Last point."])
+        self.assertLessEqual(plan["edits"][0]["source_end"], 2.0)
+        self.assertGreaterEqual(plan["edits"][1]["source_start"], 3.6)
+        kept = build_speech_plan(asset, transcript, chosen, fps=30, width=180, height=320, pause_limit=None)
+        self.assertIn("Skip this one.", [s["text"] for s in kept["subtitles"]])
+
     def test_candidates_retain_complete_thoughts_and_review_status(self):
         transcript = deepcopy(self.plan["speech"]["transcripts"][0])
         transcript["segments"][1]["words"][-1]["text"] = "thought"

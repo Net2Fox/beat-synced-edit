@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Offline end-to-end title/subtitle smoke test with generated media only.
 
-Run with the skill's Python environment. --scripts-dir can point to the repo
-root, a built skill's scripts directory, or an installed skill's scripts. This
-test never downloads models, calls speech recognition, or opens a browser.
+Run with the skill's Python environment. --scripts-dir defaults to
+skills/beat-sync-edit/scripts; point it at an installed skill's scripts folder
+to test that copy. This test never downloads models, calls speech recognition,
+or opens a browser.
 """
 from __future__ import annotations
 

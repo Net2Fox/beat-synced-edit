@@ -54,12 +54,36 @@ class SkillBundleTests(unittest.TestCase):
             self.assertEqual(sync(root).returncode, 0)
 
             (mirror / "scripts" / "stale.py").write_text("stale\n")
+            (mirror / "UPSTREAM.json").write_text("{}\n")
             (mirror / ".venv").mkdir()
             (mirror / ".venv" / "keep.txt").write_text("environment\n")
             self.assertNotEqual(sync(root, "--check").returncode, 0)
             self.assertEqual(sync(root).returncode, 0)
             self.assertFalse((mirror / "scripts" / "stale.py").exists())
+            self.assertFalse((mirror / "UPSTREAM.json").exists())
             self.assertTrue((mirror / ".venv" / "keep.txt").exists())
+            self.assertEqual(sync(root, "--check").returncode, 0)
+
+            # New top-level files are copied; editor and OS junk is ignored.
+            (skill / "NOTICE.md").write_text("notice\n")
+            (skill / "scripts" / "edit_project.py~").write_text("backup\n")
+            (skill / "references" / ".DS_Store").write_text("junk\n")
+            self.assertNotEqual(sync(root, "--check").returncode, 0)
+            self.assertEqual(sync(root).returncode, 0)
+            self.assertEqual((mirror / "NOTICE.md").read_text(), "notice\n")
+            self.assertFalse((mirror / "scripts" / "edit_project.py~").exists())
+            self.assertFalse((mirror / "references" / ".DS_Store").exists())
+            self.assertEqual(sync(root, "--check").returncode, 0)
+
+            # A symlinked target is replaced, never written through.
+            outside = root / "outside.txt"
+            outside.write_text("untouched\n")
+            (mirror / "SKILL.md").unlink()
+            (mirror / "SKILL.md").symlink_to(outside)
+            self.assertNotEqual(sync(root, "--check").returncode, 0)
+            self.assertEqual(sync(root).returncode, 0)
+            self.assertEqual(outside.read_text(), "untouched\n")
+            self.assertFalse((mirror / "SKILL.md").is_symlink())
             self.assertEqual(sync(root, "--check").returncode, 0)
 
 

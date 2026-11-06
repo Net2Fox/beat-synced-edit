@@ -1,4 +1,4 @@
-"""Public local transcript, speech montage, B-roll and anchor workflows."""
+"""Public local transcript, speech montage, B-roll and source-action workflows."""
 import argparse
 import hashlib
 import json
