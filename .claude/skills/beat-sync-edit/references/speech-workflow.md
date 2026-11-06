@@ -1,163 +1,266 @@
-# Speech, source captions and semantic anchors
+# Speech-first edits
 
-Use speech mode for an interview, a lesson or a spoken short. Use music mode for
-a musical montage. Both produce the same frame-exact version-2 project; speech
-mode keeps the selected video's original audio, at natural speed by default.
+Read this when the original speech drives the cut: an interview, lesson,
+podcast or talking-head Short. It covers transcripts, choosing phrases,
+`speech-plan`, source-bound captions, corrections, supplied translations,
+B-roll over continuous speech and missed words. A speech project keeps the
+recording's audio at natural speed and otherwise works like any project with
+`preview`, `revise`, `render` and [review-and-automation.md](review-and-automation.md).
+`speech-import`, `speech-correct`, `speech-translate`, `speech-captions`,
+`speech-broll` and `speech-retry` change the project in place and save the
+previous version in `<work>/.history/`; `-o` writes a new file instead.
 
-## Analyze, review and plan
+Contents: [Transcripts](#transcripts) · [Analyze and choose phrases](#analyze-and-choose-phrases) ·
+[Plan](#plan) · [Captions](#captions-in-a-speech-project) · [Correct words](#correct-words) ·
+[Translate and export](#translate-and-export-captions) · [B-roll](#b-roll-over-continuous-speech) ·
+[Change the selection](#add-drop-or-reorder-phrases) · [Missed words](#missed-words-gaps-and-retries) ·
+[Several recordings](#several-recordings) · [Sound](#sound)
 
-Prefer an existing SRT, VTT or word-timed JSON transcript. Local faster-whisper is
-the fallback when `--transcript` is omitted. Recognition may download model
-weights; it does not upload the recording. A local converted model plus
-`--local-files-only` permits offline recognition. `speech-batch` reuses one loaded
-recognizer for matching model/device/cache configurations.
+## Transcripts
 
-```sh
-python edit_project.py speech-analyze interview.mp4 --transcript interview.srt -o analysis.json
-python edit_project.py speech-plan interview.mp4 --transcript analysis.json -o project.json --width 1080 --height 1920
-python edit_project.py render project.json -o short.mp4
-```
+Prefer a transcript the user supplied, passed with `--transcript`:
 
-`analysis.json` contains the source asset ID, stable segment/word IDs, candidate
-IDs, their source ranges and reasons, and a gap report. Candidate punctuation and
-pause rules are heuristics, not semantic understanding. Read/listen to candidates
-before choosing them. `complete_thought` means sentence-ending punctuation was
-observed. A long sentence is flagged rather than silently cut mid-thought.
+- SRT or VTT: cue times are source seconds; phrases and captions follow whole
+  cues, with no word times and so no word highlighting.
+- Word-timed JSON: `{"segments":[{"start":0.5,"end":2.5,"text":"...","words":[{"start":0.5,"end":1.0,"text":"..."}]}]}`
+  or a top-level `"words"` array, in recording seconds, ordered,
+  non-overlapping and within the recording, words inside their segment; `id`
+  fields are kept.
+- `analysis.json`, any JSON with a `transcript` object, or a speech project.
 
-Select and reorder reviewed candidates explicitly:
-
-```sh
-python edit_project.py speech-plan interview.mp4 --transcript analysis.json --select phrase-ONE phrase-TWO -o project.json --pause-limit 0.7 --padding 0.1
-```
-
-Replace `phrase-ONE`/`phrase-TWO` with IDs in the report. `--pause-limit` retains
-up to that many seconds of a chronological gap after each selected phrase.
-`--keep-pauses` keeps the full gap. It does not insert missing pauses when a
-different sentence order is requested. `--padding` adds source context around
-cuts without reusing footage. A speech project derives its duration from selected
-speech; it never speeds up or truncates words to fit an arbitrary target.
-
-Word-timed JSON can contain `segments: [{start,end,text,words:[{start,end,text}]}]`
-or a top-level `words` array. Times are seconds in the original source. Importing
-SRT/VTT retains actual cue times but cannot provide genuine per-word highlights.
-
-## Correct, translate and export
+Without one, `speech-analyze`, `speech-plan`, `speech-batch` and `speech-retry`
+(without `--file`) recognize speech locally with faster-whisper (default
+`--model small`, `--device cpu`, `--compute-type int8`; nothing is uploaded).
+The model downloads on first use into `models/` beside the output file or
+project unless `--model-dir` is given; other flags and offline use are in
+[Local speech recognition](text-and-graphics.md#local-speech-recognition).
+Recognition mishears names, terms and speech over music: read the text and fix
+it with `speech-correct`. Install the optional requirements once:
 
 ```sh
-python edit_project.py speech-import project.json transcript.json --source-id asset-ID
-python edit_project.py speech-correct project.json --file corrections.json --glossary terminology.json
-python edit_project.py speech-translate project.json translations.json --language ru --mode bilingual
-python edit_project.py subtitles-export project.json -o bilingual.srt
-python edit_project.py subtitles-export project.json -o bilingual.vtt
+<python> -m pip install -r <skill>/requirements-transcription.txt
 ```
 
-`corrections.json` maps stable word or segment IDs to corrected text. Word edits
-retain their source timing and ID. A free segment rewrite archives its old words
-and removes their stale highlighting. `terminology.json` maps terms to corrected
-terms (case-insensitive whole-term matching), e.g. `{"net two fox":"Net2Fox"}`.
-Multiword terminology may be corrected via a segment ID when recognizer tokens
-split the phrase. The project retains an audit history of corrections.
-
-`translations.json` maps **segment IDs** to supplied translated text. The command
-does not produce translations. The editing agent/user supplies them. All visible
-segments must have a translation before translated/bilingual mode is enabled.
-Original word timings remain intact; translation text uses the source segment's
-actual range, and word timings for a different language are never invented.
-Source rewrites or trimmed translated segments are flagged for translation review.
-For long translated paragraphs, supply shorter genuinely timed source segments
-and their translations, or set an appropriate subtitle font size and `max-lines`.
-
-`speech-captions --mode original|translated|bilingual [--language ru]` changes
-display. `--no-enabled` removes generated captions. The original mode groups
-word-timed speech into compact cues. Render burns the selected display into MP4;
-SRT/VTT sidecars contain the same selected original/translated/bilingual text.
-
-Source-aware captions follow source trim, reorder and nonlinear speed changes.
-Existing output-timed imported captions are unchanged by picture revisions.
-Editing a generated caption with `subtitle_update` detaches that occurrence from
-its source timing; use `speech-correct` for changes that should follow the source.
-`subtitles-transcribe` transcribes the actual mixed output audio when a mixer is
-configured; these are output-timed captions, not source transcript metadata.
-
-## B-roll with continuous speech
+## Analyze and choose phrases
 
 ```sh
-python edit_project.py speech-broll project.json --shot speech-phrase-ID --media cutaway.mp4 --offset 1 --duration 2
+edit_project.py speech-analyze <recording> --transcript <transcript.srt> -o <work>/analysis.json
 ```
 
-The insert replaces picture only and saves the original `audio_source` mapping.
-Subtitles and voice continue across the B-roll boundaries. Omit offset/duration
-for a whole-shot replacement. `--clip` can select an existing project clip;
-`--media` imports a new local video/still. The B-roll must be long enough, and
-`--source-start` chooses its source interval. A bounded insert splits a
-constant-speed speech shot; for an existing nonlinear retime use a whole-shot
-insert or explicitly rebuild the retiming. No nonlinear curve is approximated.
+The recording must be a video with sound. `analysis.json` holds `asset` (its
+`id` is the `source_id`), `transcript` with stable segment and word IDs,
+`candidates` and `gap_report` ([gaps](#missed-words-gaps-and-retries)). Each
+candidate has `id` (`phrase-<hash>`), `start`/`end` (source seconds), `text`,
+`word_ids`, `segment_ids`, `complete_thought`, `reason` and `over_duration`.
+Candidates end at sentence punctuation or before a pause of 0.8 s or more;
+`complete_thought: true` only means the text ends with sentence punctuation,
+and a thought over 45 s is flagged `over_duration`, never cut. Choose the
+phrases for the piece, in playback order.
 
-## Gaps, targeted retries and batch work
+## Plan
+
+Pass `analysis.json` as the transcript so recognition does not run again and
+the IDs match:
 
 ```sh
-python edit_project.py speech-gaps project.json --min-gap 0.8 --threshold-db -40 -o gaps.json
-python edit_project.py speech-retry project.json --start 8.2 --end 11.4 --model small --language ru --model-dir work/models
-python edit_project.py speech-batch batch.json -o batch-analysis.json --model small --model-dir work/models
+edit_project.py speech-plan <recording> --transcript <work>/analysis.json --select <phrase-id> <phrase-id> <phrase-id> -o <work>/project.json
 ```
 
-Gap analysis finds untranscribed intervals with measurable energy; that energy
-may be speech, music or noise. Quiet intervals do not prove absence of speech.
-Listen first, then retry the chosen **uncovered** source range. Retry refuses to
-overwrite existing words, rebases real local word times into source time, gives
-new words collision-free IDs and keeps prior corrections. `--file retry.json`
-imports human-aligned replacement text for that gap, using absolute source times.
-An empty recognizer result leaves the project unchanged and reports it honestly.
+There is no duration flag: the length is the chosen phrases plus padding and
+kept pauses, so reach a target (say 45 s) by adding up `end - start` of the
+chosen candidates. The command prints `duration` and `shots`; if the length is
+wrong, change `--select` and plan again. `-o` cannot be the recording or the
+transcript.
 
-Retry updates transcript/candidates, not existing picture selections. To include
-newly recovered speech in the montage, rebuild from the updated project:
+| Flag | Default | Effect |
+|---|---|---|
+| `--select ID...` | every candidate | Phrases to use, in playback order; IDs must be known and unique. |
+| `--pause-limit S` | 0.5 | After a phrase whose next selected phrase comes later in the source, keep at most S seconds of the source that follows it. |
+| `--keep-pauses` | off | Keep the whole source span up to that next phrase, including any unselected speech in it; use it only for phrases that are consecutive in the source. Phrases played out of source order get no pause either way. |
+| `--padding S` | 0.1 | Source context before and after each phrase. Where neighbouring phrases would overlap in the source they meet halfway, so no footage repeats. |
+| `--width`, `--height`, `--fps` | 1080, 1920, 30 | Output size and frame rate (not `--size`). |
+
+Without `--select` it plans the whole recording with long pauses shortened to
+`--pause-limit`: use that to tighten a full lesson or podcast, not for a Short.
 
 ```sh
-python edit_project.py speech-plan interview.mp4 --transcript project.json -o revised-plan.json
+edit_project.py speech-plan <recording> --transcript <work>/analysis.json -o <work>/project.json
 ```
 
-Batch format: `{"items":[{"id":"a","source":"a.mp4","transcript":"a.srt"},
-{"id":"b","source":"b.mp4"}]}`. Paths resolve beside the manifest. Each item
-reports analyzed/failed separately; absent real-media review stays `not_reviewed`.
+Shot IDs are `speech-<candidate-id>`. The project keeps the transcripts,
+`speech.candidates` and the chosen order in `speech.selected`.
 
-## Semantic anchors
+## Captions in a speech project
 
-Anchor objects use one of:
+`speech-plan` and `speech-import` already turn on source-bound captions
+(original text), burned into preview and render; do not transcribe the edit
+again. They follow trims, reorders, speed changes and B-roll. Original mode
+groups word-timed speech into cues of at most 7 words, 42 characters and 3 s,
+breaking at pauses over 0.6 s; SRT/VTT gives one cue per segment. Style them
+with `text-style --track subtitles` ([Text styles](text-and-graphics.md#text-styles)),
+fix words with `speech-correct` and switch the display with `speech-captions`.
+
+These leave captions output-timed, so they stop following picture edits (as
+titles without an anchor do):
+
+- A `subtitle_update` revision detaches that cue (fixed output time);
+  `subtitle_remove` hides it for good.
+- `subtitles_shift` makes every caption output-timed and turns source captions off.
+- `subtitles-import`, `subtitles-transcribe` (it recognizes the mixed output
+  audio) and `text_clear` on `subtitles` replace or remove them and turn source
+  captions off. Use import/transcribe here only when that is intended, for
+  example captions for an added voiceover.
+
+To undo, copy the earlier project back from `<work>/.history/`, or apply
+`[{"op": "text_clear", "track": "subtitles"}]` with `revise`, then run
+`speech-captions` on the project (cues detached earlier stay hidden).
+
+## Correct words
+
+```sh
+edit_project.py speech-correct <work>/project.json --file <work>/corrections.json --glossary <work>/glossary.json
+```
+
+- `corrections.json` maps transcript IDs to text:
+  `{"<word-id>": "Kubernetes", "<segment-id>": "The whole corrected sentence."}`.
+  A word keeps its ID and timing. A segment correction drops that segment's
+  word timing (kept as `superseded_words`), so its caption loses word
+  highlighting; use it when a term was recognized as several words.
+- `glossary.json` maps terms to replacements, e.g. `{"kubernetis": "Kubernetes"}`,
+  case-insensitive and whole-term, matched inside each recognized word (or
+  untimed segment): a term split across recognized words never matches, so
+  correct that segment instead.
+- Changes are logged before/after in the transcript's `corrections`; a changed
+  segment's translations are marked stale. `--transcript-id` is needed only
+  with several transcripts.
+
+`speech-import` adds or replaces one asset's transcript (formats as for
+`--transcript`), discarding that recording's earlier corrections and
+translations, and turns source captions on. `--source-id` is the asset's `id`
+in the project's `assets` (`speech-analyze` prints it as `source_id`):
+
+```sh
+edit_project.py speech-import <work>/project.json <transcript.json> --source-id <asset-id>
+```
+
+## Translate and export captions
+
+`speech-translate` does not translate: the agent or the user supplies one text
+per segment ID (not word ID), e.g. `{"<segment-id>": "Привет, друзья."}`.
+
+```sh
+edit_project.py speech-translate <work>/project.json <work>/translations-ru.json --language ru --mode bilingual
+edit_project.py speech-captions <work>/project.json --mode translated --language ru
+edit_project.py subtitles-export <work>/project.json -o <outputs>/captions.srt
+```
+
+- Every segment visible in the edit needs a translation, or the command fails
+  and names the missing segment. `--mode` is `bilingual` (default; original
+  line above the translation) or `translated`, and the captions switch to it.
+- `speech-captions` switches the display (`--mode original|translated|bilingual`,
+  `--language`); it sets the mode on every call (default `original`), and
+  `--no-enabled` turns source captions off. `subtitles-export` writes the
+  selected display as SRT or VTT (by extension, or `--format srt|vtt`).
+- A translation takes its segment's time range, with no word times; describe
+  that timing as hard rule 3 in SKILL.md requires. For long cues,
+  supply shorter, genuinely timed segments with their translations, or set
+  `--font-size` and `--max-lines` with `text-style --track subtitles`.
+- A cue gets `translation_review_required: true` when its segment changed after
+  translation or the edit shows only part of it.
+
+## B-roll over continuous speech
+
+```sh
+edit_project.py speech-broll <work>/project.json --shot <shot-id> --media <broll.mp4> --offset 1 --duration 2
+```
+
+- Only the picture changes: the shot keeps the recording as its
+  `audio_source`, so voice and captions continue; the B-roll's sound is unused.
+- `--shot` is a shot ID from `edits[].id` (e.g. `speech-phrase-3f2a9c1d0b7e`),
+  not a number. `--media` imports a local video or still (clip
+  `<asset-id>-broll`); `--clip` reuses a clip from the project's `clips`.
+- `--offset` (default 0) and `--duration` are seconds within the shot; without
+  `--duration` the insert runs to the shot's end. A bounded insert splits the
+  shot: the first piece keeps `<shot-id>`, later ones are `<shot-id>@<from>-<to>`
+  (frames from the shot's start). It needs a constant-speed shot; over a speed
+  ramp or action anchor, cover the whole shot or remove the retime first.
+- `--source-start` (default 0) is where the insert starts in the B-roll video
+  (inside the clip for `--clip`). The video must be long enough from there;
+  otherwise shorten the insert or use a still. Reusing a video on another shot
+  needs a range that does not overlap, because footage is not repeated.
+- `--reframe auto|center|contain` (default `auto`). To swap a B-roll, run
+  `speech-broll` again on its shot ID.
+
+By contrast, `replace` (also queued by the preview page's replacement picker)
+swaps picture and sound: on a shot that is not B-roll, the voice comes from the
+replacement (or is silent) and the source captions disappear
+([Changing the picture](project-workflow.md#changing-the-picture)). `reorder`,
+`reframe`, `effects` and `speed` work as usual; voice and captions follow them.
+
+## Add, drop or reorder phrases
+
+Rebuild from the saved project with a new selection:
+
+```sh
+edit_project.py speech-plan <recording> --transcript <work>/project.json --select <phrase-id> <phrase-id> -o <work>/project-v2.json
+```
+
+- IDs are in the project's `speech.candidates`, the current order in
+  `speech.selected`; IDs near corrected segments or recovered words can change.
+  Without `--select` the whole transcript is replanned and the selection lost.
+- `-o` cannot be the project passed to `--transcript`.
+- Corrections, translations and recovered words carry over. Caption mode, text
+  styles, titles, B-roll and audio settings do not: reapply them.
+- To change only the order, a `reorder` revision keeps everything else.
+
+## Missed words: gaps and retries
+
+```sh
+edit_project.py speech-gaps <work>/project.json -o <work>/gaps.json --min-gap 0.8 --threshold-db -40
+edit_project.py speech-retry <work>/project.json --start 8.2 --end 11.4 --language ru
+edit_project.py speech-retry <work>/project.json --start 8.2 --end 11.4 --file <work>/retry.json
+```
+
+- `speech-gaps` (defaults shown) lists intervals of at least `--min-gap`
+  seconds without recognized words, with `rms_dbfs`. `review_required` means
+  energy at or above `--threshold-db`: speech, music or noise. `quiet_gap` does
+  not prove silence. `speech-analyze` writes the same report as `gap_report`.
+- `speech-retry` takes a range inside the recording that overlaps no
+  recognized word and recognizes only that range. Existing words and
+  corrections stay, new words get their own IDs, and a segment spanning the
+  gap is split (supply its translations again). `--file` imports human-aligned
+  word-timed JSON in absolute source times inside the range instead. If
+  nothing is recognized, the result says `no_speech_recognized` and the
+  project is unchanged. `--source-id` is needed only with several transcripts.
+- A retry changes the transcript and candidates, not the picture: rebuild
+  ([above](#add-drop-or-reorder-phrases)) to use the recovered speech.
+
+## Several recordings
+
+```sh
+edit_project.py speech-batch <work>/batch.json -o <work>/batch-analysis.json
+```
 
 ```json
-{"type":"word","id":"stable-word-id","edge":"start"}
-{"type":"shot","id":"shot-001","edge":"end"}
-{"type":"beat","index":4}
-{"type":"event","id":"musical-event-id"}
-{"type":"source","source_id":"asset-ID","time":2.75,"domain":"picture"}
-{"type":"action","id":"landing"}
+{"items": [{"id": "a", "source": "<recording-a>", "transcript": "<transcript-a.srt>"}, {"id": "b", "source": "<recording-b>"}]}
 ```
 
-`offset_frames` applies after resolution. Source and word references may specify
-`shot_id` to disambiguate repeats. Words use the speech mapping (including B-roll
-voice); source anchors default to picture and accept `domain: "speech"`.
-Source/output conversion uses the same raised-cosine integral/action warp as the
-renderer, and its inverse, so speed ramps do not cause captions or SFX to drift.
+Relative paths resolve beside the manifest; IDs must be unique. Items without
+a transcript share one loaded recognizer (ASR flags as for `speech-analyze`).
+Each item is `analyzed` (`asset`, `transcript`, `candidates`, `gap_report`) or
+`failed` with `error`; the report is always written, and the command exits with
+an error if any item failed. `speech-plan` cannot read the report: save one
+item's transcript as `{"transcript": {...}}` in its own file and pass that to
+`--transcript`.
 
-Persist reusable action points and anchor titles to them:
+## Sound
 
-```sh
-python edit_project.py action project.json --id landing --source-id asset-ID --time 2.75
-python edit_project.py title project.json --text 'Landing' --duration 0.6 --anchor '{"type":"action","id":"landing"}'
-```
+The soundtrack is the recording (`audio_mix.source_audio`, role `speech`),
+ducked and loudness-normalized. To add music, effects or a voiceover, extend
+the current `audio_mix` with `audio-config`, which replaces all of it: keep
+`source_audio` enabled and `replace_legacy: true`, or the edited voice is lost
+or the recording plays again from its start underneath
+([audio-workflow.md](audio-workflow.md#start-from-the-current-soundtrack)).
 
-Shell quoting differs across platforms; JSON revision/config files are the most
-portable way to pass anchor objects. Titles/graphics accept `anchor`; audio
-tracks accept `anchor`, plus explicit occurrence selection for repeated sources.
-Saved anchor resolutions refresh after revisions. Removed source events remain
-explicitly `unresolved`; a rendered title/graphic requiring an ambiguous or missing
-anchor fails validation instead of silently appearing at the wrong time.
-
-## Verification scope
-
-`tests/test_speech_timeline.py` covers inverse nonlinear timing, trim/reorder,
-stable corrections, translated sidecars, retries and anchors.
-`tests/test_speech_workflow.py` drives the public CLI, generates local media,
-renders real MP4, checks frame counts/pixels, and verifies original voice-band
-audio rather than the B-roll's different tone. These deterministic tests do not
-establish speech-recognition accuracy or the quality of real interview editing.
+Word, source and action anchors for titles, graphics and sounds that follow the
+speech are in [Semantic anchors](text-and-graphics.md#semantic-anchors).

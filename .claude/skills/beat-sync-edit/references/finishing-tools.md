@@ -1,12 +1,22 @@
 # Finishing tools and custom looks
 
-Use these after `render` only when the request needs something the project
-renderer does not do. Build the edit itself with `edit_project.py`: it keeps
-exact duration, revisions and export QA. The playback-speed rule in SKILL.md
-applies here too, and nothing in these tools enforces it.
+Read this when a request needs something the project renderer does not do: a
+square white-flash montage, an over-under stack, an FFmpeg look the project has
+no effect for, or matching a reference video. Build every other edit with
+`edit_project.py`: it keeps exact duration, revisions and export QA. Nothing
+in these tools enforces the playback-speed rule in SKILL.md; follow it here
+too.
+
+Contents: [Square white-flash montage](#square-white-flash-montage) ·
+[Over-under stack](#over-under-stack) ·
+[Custom FFmpeg looks](#custom-ffmpeg-looks-on-a-finished-mp4) ·
+[Matching a reference video](#matching-a-reference-video)
 
 Check every file these tools produce with
-`edit_project.py verify <file> --work <work>/qa` before delivering it.
+`edit_project.py verify <file> --work <work>/qa` before delivering it. Add
+`--project <work>/project.json` only for a custom look on a project render,
+whose size and length match the project
+([review-and-automation.md](review-and-automation.md)).
 
 ## Square white-flash montage
 
@@ -19,6 +29,10 @@ beat edit, use the project presets/effects instead.
 flash_montage.py --seq <work>/seq.json --audio <song> --out <outputs>/montage.mp4 --size 1080 --flash 0.5
 ```
 
+Defaults: `--size 1080`, `--flash 0.5` (seconds), `--fps 30`. The first item
+fades in from white unless you pass `--no-open-flash`; `--close-flash` fades
+the last item out to white.
+
 Write `seq.json` yourself, one item per shot, in order:
 
 ```json
@@ -28,17 +42,26 @@ Write `seq.json` yourself, one item per shot, in order:
 ]}
 ```
 
-- `image` or `video`: absolute path. `start`: source time for videos.
+- `image` or `video`: absolute path. `start`: source time for videos
+  (default 0); `start + dur` must stay inside the clip.
 - `dur`: seconds on screen, including the flash overlap. Each `dur` must be
   longer than `--flash`.
-- `zoom` with `cx`/`cy` (0-1 fractions) punches in on a subject; open a frame
-  first to place them. `stretch` > 1 widens the subject while keeping 1:1.
+- Output is always square (`--size` pixels per side): each source is
+  cover-cropped to a centred square, so the sides of a landscape frame are
+  lost. `zoom` with `cx`/`cy` (0-1 fractions of that square, default 0.5)
+  punches in on a subject; open a frame first to place them. `stretch` > 1
+  widens the subject while keeping 1:1; it distorts proportions, so follow
+  the natural-look rule in SKILL.md.
 - `motion`: `sway` (default for stills), `zoom` (slow push-in) or `none`
   (default for videos).
-- Length = `sum(dur) - (N-1) * flash`; the audio is trimmed to it and must be
-  at least that long. Output is always square (`--size` pixels per side).
-- To land flashes on the music, take `tempo` from `edit_project.py music` and
-  make each `dur` a whole number of beats (for example `4 * 60 / tempo`).
+- Length = `sum(dur) - (N-1) * flash`. The song plays from its start and is
+  trimmed to that length, so it must be at least that long; to start later in
+  the song, cut it first (`ffmpeg -ss <t> -i <song> <work>/song-cut.wav`).
+- The flash after item `i` (counting from 0) starts at
+  `sum(dur[0..i]) - (i+1) * flash`. To land flashes on the music, put these
+  times on `beats` from `edit_project.py music <song> -o <work>/beats.json`,
+  measured on the file you pass to `--audio`; for a flash every k beats, use
+  `dur = k * 60 / tempo + flash`.
 
 Iterate by editing `seq.json` and re-running the command.
 
@@ -51,8 +74,11 @@ a finished MP4:
 overunder_stack.py <outputs>/final.mp4 -o <outputs>/final-overunder.mp4 --size 960x1080
 ```
 
-16:9 sources fill each half without cropping; other ratios are scaled to
-cover and centre-cropped. The height must be even. Audio is copied.
+`--size` is the whole frame (default `960x1080`; the height must be even) and
+each half is W x H/2. A source with the half's aspect ratio (16:9 at the
+default size) fills it uncropped; other ratios are scaled to cover and
+centre-cropped, so a vertical source loses most of its height. Audio is
+copied. Without `-o` the output is `<input>_overunder.mp4`.
 
 ## Custom FFmpeg looks on a finished MP4
 
@@ -64,9 +90,10 @@ and square or vertical output (`plan --size`). See
 
 For anything else, apply one filter to the rendered file and limit it to a
 time range with `enable='between(t,A,B)'`, taking `A`/`B` from the output
-timeline (for example beat times from the beat map shifted by the plan's
-`audio.start`). Re-encode the picture only, so duration and audio stay
-unchanged:
+timeline: a cut is at `timeline_start_frame / output.fps` of its shot in the
+`edits` of `<work>/project.json`; a beat is at its time in `<work>/beats.json`
+minus `audio.start` in `project.json`. Re-encode the picture only, so
+duration and audio stay unchanged:
 
 ```sh
 ffmpeg -i <outputs>/final.mp4 -vf "<filter>" -c:v libx264 -crf 18 -pix_fmt yuv420p -c:a copy <outputs>/final-look.mp4
@@ -80,27 +107,31 @@ ffmpeg -i <outputs>/final.mp4 -vf "<filter>" -c:v libx264 -crf 18 -pix_fmt yuv42
 | strobe invert | `negate=enable='between(t,A,B)*lt(mod(t,0.25),0.04)'` |
 | black and white | `hue=s=0` |
 | teal-orange | `colorbalance=rs=-0.15:bs=0.15:rh=0.15:bh=-0.15` |
+| horizontal stretch hit at T | `-filter_complex "split[a][b];[b]scale=iw*1.25:ih,crop=iw/1.25:ih[s];[a][s]overlay=enable='between(t,T,T+0.1)'"` instead of `-vf` |
 | dreamy glow (whole clip) | `-filter_complex "split[a][b];[b]gblur=sigma=8[g];[a][g]blend=all_mode=screen:all_opacity=0.35"` instead of `-vf` |
 
-`crop`, `scale` and `setpts` ignore `enable`, so punch-ins and stretches
-belong in the project `effects` revision. Never change speed or duration
-here: no `setpts`, `minterpolate`, `fps`, `tmix` or frame blending.
+Without `enable`, `fade` darkens everything before T. `crop` and `scale`
+reject `enable` (FFmpeg fails), so the stretch row goes through `overlay`;
+use the project `zoom` effect for punch-ins. Never change speed or duration
+here: no `setpts`, `minterpolate`, `fps`, `tmix` or other blending of
+neighbouring frames.
 
 Put accents on energy peaks or drops (`peaks` and `music_structure` in the
-beat map), use one signature effect and one grade per edit, and keep
-`-pix_fmt yuv420p`.
+beat map) and use one signature effect and one grade per edit. A later
+`render` does not reapply the look: after each revision and re-render, run
+the FFmpeg step again.
 
 ## Matching a reference video
 
-A reference is not a request to copy the whole look. Extract 3-5 frames
-(`ffmpeg -ss <t> -i <reference> -frames:v 1 <work>/ref-<t>.png`), look at
-them, then match only the aspects the user named:
+The reference-video rule in SKILL.md decides which aspects to match. Extract
+3-5 frames (`ffmpeg -ss <t> -i <reference> -frames:v 1 <work>/ref-<t>.png`),
+or study a web reference in a browser if browser tools are available, then map
+each named aspect to one adjustment:
 
 - tint: `hue`/`colorbalance`; contrast: `curves`/`eq`; washed-out look:
   saturation only;
-- the way it cuts: pacing (`plan --section-stride`, `--min-shot`), not colour;
+- the way it cuts: pacing (`plan --beat-stride`, `--section-stride`,
+  `--min-shot`), not colour;
 - a specific effect: only that effect.
 
-If the user says "make it look like this" without naming aspects, ask which
-ones (colour, contrast, pacing, effects) before matching more than one. Show
-a preview frame before the final render.
+Show a preview frame before the final render.

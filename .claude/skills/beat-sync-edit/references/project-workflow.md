@@ -1,237 +1,392 @@
-# Persistent editing projects
+# Music montage projects
 
-Use `scripts/edit_project.py` for exact-duration edits, mixed media, semantic
-selection, music structure, tracked vertical framing, speed ramps and revisions.
-Use the skill's Python interpreter with `-X utf8`; pass absolute paths. All files
-below live in the user's project work directory, not the skill installation.
+Read this when you build or change a music-driven edit, or need the complete
+list of revision operations. Speech-first edits are in
+[speech-workflow.md](speech-workflow.md), text, graphics and anchors in
+[text-and-graphics.md](text-and-graphics.md), sound in
+[audio-workflow.md](audio-workflow.md).
 
-## Analyze and review
+Contents: [Analyze and annotate](#analyze-and-annotate) ·
+[Measure the music](#measure-the-music) · [Plan](#plan) · [Preview](#preview) ·
+[Revise](#revise) · [Tracking and reframing](#tracking-and-reframing) ·
+[Speed ramps](#speed-ramps) · [Requested slow motion](#requested-slow-motion) ·
+[Final render](#final-render)
 
-```powershell
-& $editPython -X utf8 "$editScripts/edit_project.py" analyze $footageFolder $extraVideo $photosZip --work "$work/library"
-& $editPython -X utf8 "$editScripts/edit_project.py" music $song --duration 25 -o "$work/beats.json"
+## Analyze and annotate
+
+```sh
+edit_project.py analyze <footage> <more-footage.mp4> <photos.zip> --work <work>/library
 ```
 
-Inputs may be files, folders, or ZIPs. ZIP contents are imported persistently
-under `work/library/imports/`. Keep that directory with the project. Each asset
-has a unique ID and absolute path, including files with identical basenames.
-Images respect EXIF orientation; video dimensions, frame rate and rotation are
-probed individually. The renderer normalizes them to the selected output format.
+Inputs may be files, folders or ZIPs; ZIP contents are extracted to
+`<work>/library/imports/`, which stays part of the project. Every asset gets a
+unique ID and absolute path, even when basenames repeat; EXIF orientation and
+each video's size, frame rate and rotation are normalised to the output format.
+The command writes `<work>/library/library.json` and returns `contact_sheets`.
+Each detected scene is one clip with ID `<asset_id>:<NNNN>`, source `start` and
+`end` seconds, measured energy/motion with their sample times, a `thumb` and a
+`subject_thumb` (the scene's first frame, at `subject_thumb_time`).
 
-Open **every** returned contact sheet. Inspect extra frames around actions and
-within long scenes when a single thumbnail is insufficient. Use visible evidence
-to annotate objects, shot sizes, quality and action moments. Energy and image
-fingerprints alone do not identify objects or understand a narrative.
-
-Write annotations using actual clip IDs from `library.json`:
+Open every contact sheet, plus extra frames around actions and in long scenes.
+Energy and image fingerprints do not identify objects or follow a story, so
+tags, shot types and actions come only from what you saw (the
+report-only-what-you-observed rule in [SKILL.md](../SKILL.md#hard-rules)).
+Write `<work>/annotations.json` keyed by clip IDs from `library.json`:
 
 ```json
-{
-  "clips": {
-    "asset_0123456789ab:0000": {
-      "tags": ["car", "drift"],
-      "shot_type": "action",
-      "action_time": 3.2,
-      "subject": [0.35, 0.25, 0.3, 0.5],
-      "quality": 0.9,
-      "notes": "Car turns toward camera; strongest action at 3.2 seconds"
-    }
-  }
-}
+{"clips": {"asset_0123456789ab:0000": {
+  "tags": ["car", "drift"], "shot_type": "action", "action_time": 3.2,
+  "subject": [0.35, 0.25, 0.3, 0.5], "quality": 0.9,
+  "notes": "Car turns toward camera; strongest action at 3.2 seconds"}}}
 ```
 
-`action_time` is absolute source time inside that clip. `subject` is normalized
-`[left, top, width, height]`, all within the image. Allowed shot types: `wide`,
-`establishing`, `medium`, `closeup`, `close-up`, `detail`, `action`, `unknown`.
-Use `exclude: true` for unusable footage. Do not infer unseen actions or label an
-unreviewed clip as reviewed. Verify a supplied subject box on the initial frame
-of the scene (`subject_thumb` at `subject_thumb_time`) before using it to
-initialize tracking. The plan retains that tracking start even when it selects
-a later source range from the scene.
+| Field | Meaning |
+|---|---|
+| `tags` | non-empty strings; presets and `plan --tags` prefer matching clips |
+| `shot_type` | `wide`, `establishing`, `medium`, `closeup`, `close-up`, `detail`, `action` or `unknown` |
+| `action_time` | absolute source seconds inside the clip; the planner tries to land it on a beat ([Speed ramps](#speed-ramps)) |
+| `subject` | normalised `[left, top, width, height]` inside the image, measured on `subject_thumb`; tracking starts from that frame even when the plan uses a later part of the scene |
+| `quality` | 0 to 1 |
+| `exclude` | `true` keeps an unusable clip out of plans |
+| `notes` | free text; `--query` matches it together with tags |
+| `annotation_evidence` | optional: `reviewer`, `notes`, `frames` (source seconds you looked at, inside the clip), `confidence` 0 to 1 |
 
-Apply observations without decoding sources again:
+Apply the annotations without decoding the sources again:
 
-```powershell
-& $editPython -X utf8 "$editScripts/edit_project.py" annotate "$work/library/library.json" --annotations "$work/annotations.json"
+```sh
+edit_project.py annotate <work>/library/library.json --annotations <work>/annotations.json
 ```
 
-You can also re-run `analyze` with `--annotations`. Keep the same input list when
-re-running; otherwise omitted assets will leave the library.
-Measured analysis and thumbnails are cached by source content and analyzer
-identity; annotations are applied afresh. Each clip records sample-time evidence.
+It updates the library in place (`-o` writes a copy) and reports
+`semantic_review: complete` once every clip has an annotation. `analyze` with
+`--annotations <work>/annotations.json` does the same, but give it the same
+input list: assets left out drop out of the library. Re-running is cheap
+(measurements are cached by source content; annotations are applied fresh).
+
+## Measure the music
+
+```sh
+edit_project.py music <song> --duration 25 -o <work>/beats.json
+```
+
+`--duration` (default 25) picks the most energetic window of that length as
+`best_segment`; `plan` starts the audio there unless `--audio-start` is given,
+so pass the same duration to both. The map also holds beats, energy, beat
+confidence and phrase/event hypotheses; to judge or correct them, read
+[music-editorial.md](music-editorial.md). To shorten or rearrange the song by
+bars first, run `arrange-music` ([audio-workflow.md](audio-workflow.md)) and
+plan with the `.beats.json` it writes next to the arranged WAV.
 
 ## Plan
 
-```powershell
-& $editPython -X utf8 "$editScripts/edit_project.py" plan --library "$work/library/library.json" --beats "$work/beats.json" --duration 25 --preset car --size 1080x1920 --fps 30 -o "$work/project.json"
+```sh
+edit_project.py plan --library <work>/library/library.json --beats <work>/beats.json --duration 25 --preset car --grade none --size 1080x1920 --fps 30 -o <work>/project.json
 ```
 
-`--preset` accepts `cinematic`, `car`, `gaming`, `product`. Run `presets` to see
-their actual pace, color, transition and speed settings. Choose from the user's
-intent; a preset is a starting point and explicit requests take precedence.
-Use `--section-stride drop=1 --min-shot 0.25` for faster cuts in the middle while
-retaining longer intro/outro plans; repeat `--section-stride NAME=N` for other
-sections. `--beat-stride N` changes every section. `--min-shot`/`--max-shot`
-bound nominal shot lengths (a final section boundary or source shortage may
-require a shorter remainder). `--grade none` preserves natural color;
-`--tags car drift` prefers those reviewed labels; `--exclude CLIP_ID ...`
-omits named clips. Speed limits use `--min-speed`/`--max-speed`; the default
-minimum is 1x. Presets cannot authorize slow motion.
+Defaults: `--duration 25`, `--preset cinematic`, `--size 1080x1920`,
+`--fps 30`, `--pacing-mode auto`, `--reframe auto`, `--shortage extend`,
+`--min-speed 1`, `--max-speed 3`, `--interpolation none`; without `--grade` the
+preset's grade applies. Flags override the preset's values.
 
-The plan contains frame-based timing, musical sections, selected source ranges,
-per-shot explanations/alternatives and effects. `--pacing-mode auto` uses beat
-cuts for supported pulse and phrase-flow holds otherwise. Phrase flow uses a
-`flow` section instead of inventing intro/build/drop/outro semantics. Inspect
-the selected audio start and section boundaries. `--audio-start` sets a specific
-start in seconds; `--sections` accepts a JSON array of `{name, start, end}`
-records in output seconds (or `start_frame`, `end_frame`). Names are `intro`,
-`build`, `drop`, `outro`; sections must cover the whole output contiguously.
-For manual beat/event/phrase corrections, confidence, query/preferences and
-reviewed accept/reject decisions, read [music-editorial.md](music-editorial.md).
-Build/drop acceleration curves now allocate extra unique source ranges while
-reserving enough footage for the rest of the output; they do not normalize a
-variable curve into accidental slow motion.
+### Presets
+
+| Preset | Character | Grade |
+|---|---|---|
+| `cinematic` (default) | patient establishing shots, gentle build, restrained accents | `cinematic` |
+| `car` | wide/detail alternation, accelerating pace, punchy drop accents | `cool` |
+| `gaming` | action-focused rapid cuts, timed impact accents | `vivid` |
+| `product` | clean overview/detail sequences, gentle motion | `warm` |
+
+A preset sets beats per cut for each section, minimum/maximum shot length,
+target energy, preferred tags, a shot-type cycle, effects and a build/drop
+speed ramp (`edit_project.py presets` prints the values). Preferred tags and
+the shot cycle steer which clips are chosen, so pick by subject first and fall
+back to `cinematic`. Every preset grades every shot, adds a slight zoom to
+every shot and puts its flash/zoom/shake accents on drop cuts (none in phrase
+flow). `--grade none` keeps natural colour (the natural-look rule in
+[SKILL.md](../SKILL.md#hard-rules)); `neutral` is the same.
+
+### Request to flag
+
+| The user asks for | Use |
+|---|---|
+| natural colour, or names no look | `--grade none` |
+| a colour look | `--grade cinematic`, `cool`, `vivid` or `warm` |
+| punchier, more cuts in the drop | `--section-stride drop=1` with a lower `--min-shot`, or the `car`/`gaming` preset |
+| calmer | a larger `--section-stride NAME=N` for the busy sections, a higher `--min-shot`, the `cinematic`/`product` preset, or `--pacing-mode phrase_flow` |
+| the same cut spacing everywhere | `--beat-stride N`; it replaces every section's stride and can make a slow preset faster |
+| a longest or shortest shot | `--max-shot` / `--min-shot` in seconds |
+| vertical, square, landscape; a frame rate | `--size 1080x1920`, `1080x1080`, `1920x1080` (even numbers); `--fps N` (1 to 120) |
+| a particular part of the song | `--audio-start SECONDS`, or `arrange-music` first to cut the song by bars |
+| particular content first | `--tags TAG ...` for annotated tags; `--query "text"` and `--preferences` ([music-editorial.md](music-editorial.md)) |
+| a clip left out | `--exclude CLIP_ID ...`, or `exclude: true` in the annotations |
+| the camera to follow a subject | `subject` boxes in the annotations (per clip), or `--subject X Y W H` (one box for every shot, replacing the annotated ones), with `--reframe auto` |
+| the whole frame kept; a fixed centre crop | `--reframe contain` (bars); `--reframe center` |
+| repeated footage allowed | `--allow-repeats` (with `--shortage repeat`) |
+| no flashes; a different shot order | revisions `{"op": "effects", "all": true, "values": {"flash": 0}}`; `reorder` ([Revise](#revise)) |
+| slow motion, in their own words | [Requested slow motion](#requested-slow-motion) |
+
+`--section-stride` takes `intro`, `build`, `drop` or `outro`, can be repeated
+and wins over `--beat-stride` for its section. Strides apply to beat cuts only.
+`--min-shot`/`--max-shot` bound the nominal shot length; the last shot of a
+section or a source shortage can be shorter.
+
+### Pacing, sections and shortage
+
+`--pacing-mode auto` cuts on beats (`beat_cut`) when the pulse supports it,
+otherwise `phrase_flow`: holds on phrase and event boundaries in one `flow`
+section ([music-editorial.md](music-editorial.md)). After planning, read
+`audio.start`, `sections`, `diagnostics` and each shot's `selection` in
+`project.json`; `edit_project.py inspect <work>/project.json` prints duration,
+sections and diagnostics.
+
+To set the sections yourself, pass `--sections <work>/sections.json`: a JSON
+array of `{name, start, end}` in output seconds (or `start_frame`,
+`end_frame`), names `intro`, `build`, `drop`, `outro`, contiguous and covering
+the whole output.
+
+```json
+[{"name": "intro", "start": 0, "end": 4}, {"name": "build", "start": 4, "end": 8},
+ {"name": "drop", "start": 8, "end": 21}, {"name": "outro", "start": 21, "end": 25}]
+```
+
+Duration is rounded to the nearest output frame (25 s at 30 fps is 750 frames)
+and the renderer checks the frame count; from the audio start it must fit
+inside the song. When unused footage runs short (the exact-duration rule in
+[SKILL.md](../SKILL.md#hard-rules)), `--shortage extend` (default) uses the
+available ranges within the speed limits and can hold stills longer,
+`--shortage error` fails instead and `--shortage repeat --allow-repeats` reuses
+footage. If planning still fails, ask for more footage or a change of duration
+or repeat policy. A `--min-speed` below 1 is rejected without the slow-motion
+opt-in.
+
+## Preview
+
+```sh
+edit_project.py preview <work>/project.json -o <work>/preview.mp4
+```
+
+This renders a smaller, fast-encoded video and `<work>/preview.html` (`--html`
+sets another path), an offline review page with a player, shot buttons, a
+replacement-clip picker, a duration field, a remove-flashes button and a
+title/caption editor; show the user either one. The page only queues
+operations and downloads `revisions.json`; apply that file with `revise`.
+Preview runs the same export QA as render
+([review-and-automation.md](review-and-automation.md)). Check cut placement
+against `beat_frames` and `sections` in the project.
+
+## Revise
+
+```sh
+edit_project.py revise <work>/project.json --operations <work>/revisions.json
+edit_project.py preview <work>/project.json -o <work>/preview-v2.mp4
+```
+
+`revise` validates the whole list and writes nothing on error. On success it
+saves the previous project in `<work>/.history/` (copy one back to undo) and
+increments `revision`; `-o` writes a new file instead. Operations apply in
+order, and unchanged shots are reused from the render cache.
+
+**Addressing.** `shot` is a 1-based position in the current order or a shot ID
+such as `shot-003`; prefer IDs, because positions change after `reorder`.
+`effects`, `reframe` and `speed` also accept `"section": "drop"` or
+`"all": true`; `replace` and `duration` need exactly one shot. Shot IDs are in
+`edits[].id` and on the preview page; the `--shot` flag of `tracking-report`,
+`reframe-keyframes` and `speech-broll` takes an ID, not a number.
 
 ```json
 [
-  {"name": "intro", "start": 0, "end": 4},
-  {"name": "build", "start": 4, "end": 8},
-  {"name": "drop", "start": 8, "end": 21},
-  {"name": "outro", "start": 21, "end": 25}
-]
-```
-
-Duration is rounded to the nearest output frame, and the renderer verifies the
-frame count. A 25-second request at 30 fps yields 750 frames. Shortage policy:
-`--shortage extend` uses available ranges while respecting the speed policy;
-`--shortage error` fails when natural-speed material is insufficient;
-`--shortage repeat --allow-repeats` explicitly permits reused footage. Preserve
-the user's constraints: if material is still insufficient, request more footage
-or a change to duration/repeat policy rather than silently ignoring them.
-Never lower the speed limit to fill missing duration unless the user's prompt
-explicitly asks for slow motion and interpolation has been enabled.
-
-## Preview and revise
-
-```powershell
-& $editPython -X utf8 "$editScripts/edit_project.py" preview "$work/project.json" -o "$work/preview.mp4"
-```
-
-This renders a smaller video plus an offline HTML review page with a player,
-shot navigation and a revision-file editor. Open the HTML or show the MP4.
-Inspect representative frames, subject visibility, rhythm and audio alignment.
-If the user already requested a final export, continue through verification;
-preview generation itself does not require another approval.
-
-Translate conversational revisions into JSON operations. Shot numbers start at
-**1**; persistent IDs such as `shot-001` are preferable after reordering.
-
-```json
-[
-  {"op": "replace", "shot": 3, "clip_id": "asset_0123456789ab:0000"},
+  {"op": "replace", "shot": "shot-003", "clip_id": "asset_0123456789ab:0002"},
+  {"op": "replace", "shot": "shot-005", "clip_id": "asset_0123456789ab:0000", "source_start": 3.0, "source_end": 4.6},
+  {"op": "reorder", "order": ["shot-002", "shot-001", "shot-003", "shot-004", "shot-005"]},
+  {"op": "duration", "shot": "shot-001", "seconds": 2.5, "borrow_from": "shot-002"},
+  {"op": "replace", "shot": "shot-001", "clip_id": "asset_0123456789ab:0004"},
   {"op": "effects", "all": true, "values": {"flash": 0}},
-  {"op": "duration", "shot": 1, "seconds": 2.5, "borrow_from": 2}
+  {"op": "effects", "section": "drop", "values": {"grade": "none", "zoom": 1.1}}
 ]
 ```
 
-Replacement preserves output duration. A duration revision borrows frames from
-another shot, preserving the total; by default it uses the next shot (previous
-for the final shot). It changes effective playback speed. A revision that would
-slow any video below 1x is rejected unless explicit slow motion is enabled;
-choose a longer unused source range or another shot instead.
-Timing/reordering revisions also update the section spans; the original musical
-sections remain in `original_sections`. Check the revised cuts against the beat
-map, since an explicitly changed duration may move a cut off a beat.
-Effects can target `shot`, `section`, or `all: true`. Supported values are
-`flash`/`shake` from 0 to 1, `zoom` >= 1, and a supported `grade`.
+### Operations
 
-```powershell
-& $editPython -X utf8 "$editScripts/edit_project.py" revise "$work/project.json" --operations "$work/revisions.json"
-& $editPython -X utf8 "$editScripts/edit_project.py" preview "$work/project.json" -o "$work/preview-v2.mp4"
-```
+| Op | Fields | Effect |
+|---|---|---|
+| `replace` | `shot`, `clip_id`; optional `source_start`, `source_end` (source seconds inside the clip) | New picture, same output length. Without a range it takes the first unused range long enough for 1x; with only `source_start` it plays at 1x from there if the clip is long enough. Resets the shot's speed curve, action anchor and reframe (`auto` with the clip's annotated subject). |
+| `reorder` | `order`: every shot ID exactly once | New shot order. |
+| `duration` | `shot`, `seconds`; optional `borrow_from` (a shot) | Sets one shot's length and takes the difference from the next shot (the previous one for the last shot) or from `borrow_from`; the total stays exact. Source ranges stay, so both shots change speed. |
+| `effects` | selector, `values`: `flash` and `shake` 0 to 1, `zoom` 1 to 4, `grade` `none`/`neutral`/`cinematic`/`cool`/`vivid`/`warm` | Merges into each selected shot's effects. |
+| `reframe` | selector, `mode`, `subject`, `subject_start`, `keyframes`, `sample_fps`, `confidence_threshold` | [Tracking and reframing](#tracking-and-reframing) |
+| `speed` | selector, `points`, optional `anchor` | [Speed ramps](#speed-ramps) |
+| `slow_motion_policy` | `prompt`, `interpolation`, `min_speed` | [Requested slow motion](#requested-slow-motion) |
+| `title_add`, `title_update`, `title_remove`, `subtitle_add`, `subtitle_update`, `subtitle_remove`, `subtitles_replace`, `subtitles_shift`, `text_style`, `text_clear`, `anchor_set` | see [text-and-graphics.md](text-and-graphics.md) | titles, captions and named anchors |
+| `qa_policy` | `values`: `intentional_black`, `intentional_silence` | intentional black or silent ranges: [review-and-automation.md](review-and-automation.md) |
 
-Revisions are validated before writing; previous project JSON is saved under
-`.history/`. Unchanged rendered shots are reused from the cache. Keep the saved
-project, library, imports and original media to continue in another session.
+Commands write the remaining operations; use the command rather than writing
+them by hand: `style` (`style`), `graphics_set` (`graphics`, which replaces
+every layer), `graphics_remove` (`graphics-remove`), `action_set` (`action`)
+and the `speech_*` operations (the `speech-*` commands).
 
-## Tracking and smooth speed changes
+### Changing the picture
 
-`reframe.mode = auto` tracks a supplied subject box, or uses face/motion cues
-when no box is given. Review tracking: occlusion and scene changes can break
-visual tracking. `center` is a fixed central crop; `manual` locks a chosen subject
-region; `contain` preserves the whole image with bars. For a moving target chosen
-by the user, use `auto` with its initial bounding box.
+- **Music project.** Each shot's `selection.alternatives` lists up to three
+  other clips with `clip_id`, `score`, `reason`, `available_source`
+  (`[start, end]` of unused source) and `fits_slot`; prefer `fits_slot: true`.
+  Any clip ID in the project's `clips` list (the library at planning time) is
+  accepted, so new footage needs `analyze` with the full input list, `annotate`
+  and a new `plan`.
+- **Speech project.** `replace` also swaps the speech audio and that shot's
+  source-bound captions for whatever the new range contains, and the preview
+  page's replacement picker queues `replace` too. To change only the picture,
+  use `speech-broll` ([speech-workflow.md](speech-workflow.md)).
+
+### Timing rules
+
+- A change that would play any shot below 1x is rejected unless slow motion is
+  enabled; choose a longer unused source range (`replace` with
+  `source_start`/`source_end`) or another clip. Lengthening a 1x shot with
+  `duration` always needs this: in the same list, follow the `duration` op with
+  a `replace` of that shot (its own or another `clip_id`).
+- Ranges of the same source may not overlap unless repeats are allowed.
+- `duration` and `reorder` rebuild `sections` from the shots, keep the planned
+  ones in `original_sections` and set `timing_manually_revised`. Check moved
+  cuts against `beat_frames`.
+- Titles and graphics with an `anchor` move with it; other text keeps its
+  output time ([text-and-graphics.md](text-and-graphics.md)).
+
+Keep the project, library, `imports/` and original media to continue in
+another session.
+
+## Tracking and reframing
+
+Each shot's `reframe.mode` decides the crop. `auto` (default) tracks the
+`subject` box from `subject_start`, which must be at or before the shot's
+`source_start`; without a box it follows faces, then frame-difference motion,
+then the centre. For a moving subject the user chose, use `auto` with its box.
+`manual` holds a fixed crop centred on the `subject` box, `center` a fixed
+central crop, and `contain` keeps the whole image with bars.
 
 ```json
-[
-  {"op": "reframe", "shot": 3, "mode": "auto", "subject": [0.35, 0.25, 0.3, 0.5]},
-  {"op": "speed", "shot": 3,
-   "points": [{"at": 0, "speed": 1}, {"at": 0.5, "speed": 1}, {"at": 1, "speed": 1}],
-   "anchor": {"source_time": 3.2, "output_fraction": 0.5}}
-]
+[{"op": "reframe", "shot": "shot-003", "mode": "auto", "subject": [0.35, 0.25, 0.3, 0.5],
+  "subject_start": 12.0, "sample_fps": 8, "confidence_threshold": 0.6}]
 ```
 
-Speed points are **relative weights** along normalized output time, smoothly
-interpolated and normalized to consume the selected source range. The source
-span divided by output duration is the average speed. An action anchor fixes
-the named source moment to an exact output fraction; choose that fraction from
-the desired beat. Even weights at or above 1 can produce a local speed below
-1x after normalization or anchoring. Both planning and rendering check the
-effective speed; nominal point values and output FPS alone are insufficient.
-Preserve frame/time units when revising.
-The planner's speed limits also apply to revisions, including the anchored
-curve. If a curve exceeds them, choose gentler weights or an appropriate source
-span. Slow motion requires the explicit opt-in below.
+`reframe` replaces the shot's whole reframe setting. `mode` defaults to
+`manual`, which needs `subject` or `keyframes`. `subject_start` (source
+seconds) defaults to the shot's `source_start`; the box must match that frame.
+`sample_fps` is 0.1 to 60 (default 5), `confidence_threshold` 0 to 1 (default
+0.55).
 
-### Explicitly requested slow motion
+Check a tracked shot, then correct its path with explicit camera centres:
 
-Only use this when the user's prompt directly requests slowing the footage.
-Copy the actual request into `--slow-motion-prompt`; do not treat "cinematic",
-"smooth", beat synchronization, a preset or a high source FPS as permission.
-For example, if the user actually said "Slow the impact down to half speed
-with frame interpolation":
-
-```powershell
-& $editPython -X utf8 "$editScripts/edit_project.py" plan --library "$work/library/library.json" --beats "$work/beats.json" --duration 25 --slow-motion-prompt 'Slow the impact down to half speed with frame interpolation' --interpolation optical_flow --min-speed 0.5 -o "$work/project.json"
+```sh
+edit_project.py tracking-report <work>/project.json --shot shot-003 -o <work>/tracking-shot-003.json
+edit_project.py reframe-keyframes <work>/project.json --shot shot-003 --keyframes <work>/camera.json
 ```
 
-The project records `policies.allow_slow_motion`, the exact quote in
-`policies.slow_motion_prompt`, and `policies.interpolation = optical_flow`.
-The quote records authorization; it does not parse which shot or speed was
-requested. Apply source ranges and speed curves only to the requested moments
-and inspect the resulting speed bounds. The default minimum becomes .5x when
-opted in; set it explicitly to match the request.
-
-For a saved project, an explicit revision can enable the same policy:
+The report holds the source-time camera path (`keyframes` with `time`, `cx`,
+`cy`, `method`, `confidence`), `low_confidence_intervals` in source seconds and
+`review_required`. Motion is not object recognition, and confidence does not
+verify that the right subject is followed (`identity_verified` is always
+`false`): look at frames in the low-confidence intervals and around
+occlusions, scene changes and people crossing or leaving the frame.
 
 ```json
-[
-  {"op": "slow_motion_policy", "prompt": "Slow the impact down to half speed with frame interpolation", "interpolation": "optical_flow", "min_speed": 0.5}
-]
+[{"time": 2.0, "cx": 0.3, "cy": 0.5}, {"time": 3.5, "cx": 0.7, "cy": 0.48}]
 ```
 
-Supply this only after a matching user request. Older projects with slowdown
-and no recorded request are rejected; do not automatically opt them in to
-make validation pass. Disable slow motion with an empty prompt, interpolation
-`none` and minimum 1 after correcting any remaining slow shots.
+In `camera.json`, `time` is absolute source seconds, non-negative, strictly
+increasing and not past the shot's `source_end`; `cx`/`cy` are normalised
+centres from 0 to 1. `reframe-keyframes` is a revision (`.history/` snapshot,
+`-o` for a copy) that sets `auto` mode with these keyframes in place of the
+subject box. The camera interpolates the centres along the same source
+timeline as speed ramps; inspect frames where the direction or the subject
+changes.
 
-The renderer synthesizes intermediate motion using optical flow. Plain
-timestamp stretching, lower playback FPS, duplicate-frame slow motion and
-simple crossfades are forbidden. An interpolation error fails the render;
-there is no ordinary-slowdown fallback. Check moving edges, motion blur and
-occlusions in the actual output because optical flow can produce artifacts.
-Interpolation needs a following native frame. The planner reserves a frame at
-the end of known video assets; if a manually edited range lacks that frame,
-trim its end or choose a longer source instead of freezing the final frame.
+## Speed ramps
+
+Every video shot has `speed_points` and may have an `action_anchor`. In build
+and drop sections the planner gives video shots the preset's ramp (faster in,
+1x at the beat nearest the middle, faster out) and, when the clip has an
+`action_time` and the shot contains a beat, tries to put the action on that
+beat. A ramp needs extra unused source; the planner keeps it only when enough
+remains ([music-editorial.md](music-editorial.md)).
+
+```json
+[{"op": "speed", "shot": "shot-003",
+  "points": [{"at": 0, "speed": 2}, {"at": 0.5, "speed": 1}, {"at": 1, "speed": 2}],
+  "anchor": {"source_time": 3.2, "output_fraction": 0.5}}]
+```
+
+- `points` are relative weights along normalised output time: `at` runs from
+  exactly 0 to exactly 1, strictly increasing; `speed` is above 0. The curve is
+  smoothly interpolated and scaled to consume exactly the shot's source range,
+  so `average_speed` is (`source_end` − `source_start`) / output duration. To
+  change the overall speed, change the source range (`replace` with
+  `source_start`/`source_end`) or the shot length (`duration`).
+- Scaling and anchoring can put part of a shot below 1x even when every weight
+  is 1 or more: a 2→1→2 curve needs about 1.5 source seconds per output second
+  to keep its middle at 1x.
+- `anchor` places `source_time` (strictly inside the shot's source range) at
+  `output_fraction` of the shot (between 0 and 1); take the fraction from the
+  target beat: (beat frame − shot start frame) / shot frames. A `speed` op
+  without `anchor` removes an existing anchor.
+- `plan`, `revise` and `render` reject a curve outside `policies.min_speed` and
+  `policies.max_speed` (1 and 3 by default); use gentler weights, move the
+  anchor or change the source span. `time`/`source_time` are source seconds;
+  `at` and `output_fraction` are fractions of the output shot.
+
+## Requested slow motion
+
+Use this only as the playback-speed rule in [SKILL.md](../SKILL.md#hard-rules)
+allows. If the user actually said "Slow the impact down to half speed with
+frame interpolation", either plan with it:
+
+```sh
+edit_project.py plan --library <work>/library/library.json --beats <work>/beats.json --duration 25 --slow-motion-prompt "Slow the impact down to half speed with frame interpolation" --interpolation optical_flow --min-speed 0.5 -o <work>/project.json
+```
+
+or enable it in a saved project:
+
+```json
+[{"op": "slow_motion_policy", "prompt": "Slow the impact down to half speed with frame interpolation", "interpolation": "optical_flow", "min_speed": 0.5}]
+```
+
+- The project records `policies.allow_slow_motion`, the exact quote in
+  `policies.slow_motion_prompt`, `policies.interpolation: "optical_flow"` and
+  `policies.min_speed`, which defaults to 0.5 once enabled (`plan` accepts
+  0.01 to 1); set it to match the request. A prompt without `optical_flow`, or
+  slowdown without a recorded prompt, fails validation in `plan`, `revise` and
+  `render`.
+- The quote authorizes; it does not choose shots or speeds. Slow only the
+  requested moment: give that shot a source span shorter than its output length
+  (`replace` with the same `clip_id` and `source_start`/`source_end`, then
+  `speed` and `anchor` if needed) and check its `average_speed`.
+- While the policy is on, the planner's ramps and shortage handling and a
+  `replace` without a range can also go below 1x in shots nobody asked to slow.
+  Plan at 1x first, enable the policy by revision for the requested shot, and
+  give other replacements an explicit `source_start`/`source_end`.
+- The renderer interpolates every shot whose slowest speed is below 1x with
+  optical flow; an interpolation error fails the render. Interpolation needs a
+  following native frame. Only a plan made with slow motion enabled leaves one
+  free at the end of each video, so for a hand-set range that reaches a
+  video's last frame, trim `source_end` or choose a longer source. Check moving
+  edges, motion blur and occlusions in the output, where optical flow can
+  produce artifacts.
+- To switch it off, first revise every slowed shot back to 1x or faster, then,
+  in a later `revise`, apply `{"op": "slow_motion_policy", "prompt": ""}`;
+  interpolation returns to `none` and the minimum to 1. The policy is checked
+  before the other operations of the same list.
 
 ## Final render
 
-```powershell
-& $editPython -X utf8 "$editScripts/edit_project.py" render "$work/project.json" -o "$outputs/edit.mp4"
+```sh
+edit_project.py render <work>/project.json -o <outputs>/final.mp4
 ```
 
-Output is H.264/AAC MP4 with square pixels. The verification JSON records actual
-dimensions, video frames and audio presence. Use technical checks plus visual
-and musical review; do not treat successful encoding as proof of editorial
-quality. Keep preview and final paths distinct. Read the project's warnings and
-report any tracking or playback aspects that remain unverified.
+The output is an H.264 (yuv420p, square pixels) and AAC MP4 at the project's
+size and frame rate; cached shots in `<work>/cache` are reused (`--cache` sets
+another folder). Render runs export QA, writes `final.verification.json`,
+`final.qa.json`, `final.audio.json` and `final.review-NN.png` beside the MP4 and
+fails when a technical check fails
+([review-and-automation.md](review-and-automation.md)). Keep preview and final
+paths distinct. Read the project's `diagnostics`, and report tracking or speed
+aspects you did not check.
