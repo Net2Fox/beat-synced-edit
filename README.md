@@ -1,9 +1,9 @@
-# Beat-Sync Edit for Codex and Claude Code
+# Beat-Sync Edit for Claude Code and Codex
 
 **English** · [Русский](README.ru.md) · [Full capabilities](docs/capabilities.md)
 
 Create music-synced edits from your videos and photos by describing the result
-to Codex or Claude Code. This **Net2Fox fork** adds a persistent editing project,
+to Claude Code or Codex. This **Net2Fox fork** adds a persistent editing project,
 exact output duration, speech-led editing, audio mixing, local motion graphics,
 subject tracking, captions and controlled slow motion to
 [ZiadAbdelkarim's original project](https://github.com/ZiadAbdelkarim/beat-synced-edit).
@@ -30,35 +30,49 @@ new footage. The Python tools can also run directly without an agent.
 | Export and review | H.264/AAC MP4, decode/audio/black-frame QA, contact sheets, input-bound execution plans and batch caches. |
 
 See the [complete capability guide](docs/capabilities.md) for every supported
-workflow, preset differences, examples and practical limits, including the
-specialized tools inherited from the original project.
+workflow, preset differences, examples and practical limits.
 
 ## Requirements
 
-- **Codex or Claude Code with local file and command access** for conversational editing.
-  The CLI alone does not require Codex or an OpenAI API key.
-- **Python 3.12 recommended.** This fork was tested on Windows with Python 3.12.
-  macOS/Linux setup commands are included; they are not a claim of a tested
-  platform matrix. Other Python versions need compatible dependency versions.
+- **Claude Code or Codex with local file and command access** for conversational
+  editing. The CLI alone needs neither an agent nor an API key.
+- **Python 3.12 or newer.** Tested on Windows with Python 3.12 and on Linux with
+  Python 3.13; macOS uses the same POSIX commands.
 - **FFmpeg and ffprobe on PATH**, including H.264 (`libx264`) and AAC encoding.
   Obtain a build for your system from the [FFmpeg download page](https://ffmpeg.org/download.html).
 - Local footage, a soundtrack and space for imported media, previews and caches.
   A Unicode font is needed for titles/captions; use an explicit TTF/OTF path if
   the system font does not cover the required characters.
 
-The base environment uses librosa, PySceneDetect, OpenCV, NumPy and Pillow.
-Speech recognition is optional and uses Faster Whisper. A GPU is not required;
-speech defaults to CPU/int8 and rendering/interpolation run locally.
+The base environment uses librosa, PySceneDetect, OpenCV, NumPy, SciPy and
+Pillow (about 0.7 GB). Speech recognition is optional and uses Faster Whisper.
+A GPU is not required; speech defaults to CPU/int8 and rendering/interpolation
+run locally.
 
 ## Install the skill
 
-`skills/beat-sync-edit` is the canonical package. `.claude/skills/beat-sync-edit`
-is a complete, synchronized copy for Claude Code in this repository, including
-the same instructions, runtime modules, references and licenses. For a Claude
-Code checkout use that directory as `skillRoot` in the environment setup below.
-Both agents use `edit_project.py`; neither is routed through the legacy planner.
+The skill is the whole [`skills/beat-sync-edit`](skills/beat-sync-edit) folder:
+`SKILL.md`, `scripts/`, `references/`, the requirements files and the license.
+Copying only `SKILL.md` leaves the skill without its tools.
 
-### Ask Codex to install it
+### Claude Code
+
+Copy the folder to `~/.claude/skills/beat-sync-edit` to use it in every project,
+or to `<project>/.claude/skills/beat-sync-edit` for one project, then set up its
+environment (below). Claude Code can do this for you:
+
+```text
+Install the skill from https://github.com/Net2Fox/beat-synced-edit
+(folder skills/beat-sync-edit) into ~/.claude/skills/beat-sync-edit.
+Create a .venv inside it, install its requirements.txt, and check that
+ffmpeg and ffprobe are available.
+```
+
+This repository also contains a synchronized copy in
+`.claude/skills/beat-sync-edit`, so Claude Code sessions opened inside the
+repository load the skill without installing it.
+
+### Codex
 
 Send this request to Codex:
 
@@ -69,28 +83,16 @@ Create a .venv inside the installed skill directory, install its requirements.tx
 and check that ffmpeg and ffprobe are available. Tell me the installed path.
 ```
 
-Install the **whole** `skills/beat-sync-edit` directory. Copying only `SKILL.md`
-leaves out the scripts, references, dependencies and license. Codex should
-discover the skill after installation; if it does not appear, restart Codex.
-See [OpenAI's skill documentation](https://learn.chatgpt.com/docs/build-skills).
+To install by hand, copy the folder to `~/.agents/skills/beat-sync-edit` (personal)
+or `<project>/.agents/skills/beat-sync-edit` (one repository); some installers use
+`$CODEX_HOME/skills` (usually `~/.codex/skills`). Avoid duplicate copies and
+restart Codex if the skill does not appear. See
+[OpenAI's skill documentation](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills).
 
-### Manual installation and environment setup
+### Environment setup
 
-Clone this repository and copy `skills/beat-sync-edit` into a skill directory
-recognized by your Codex installation. Current documented locations include
-`~/.agents/skills/beat-sync-edit` for personal use and
-`<project>/.agents/skills/beat-sync-edit` for one repository. Some bundled
-installers use `$CODEX_HOME/skills` (usually `~/.codex/skills`); use the path
-reported by your installer and avoid installing duplicate copies.
-The [official skill locations](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills)
-describe local discovery.
-
-```sh
-git clone https://github.com/Net2Fox/beat-synced-edit.git
-```
-
-Replace the example path below with the actual installed directory. Create
-the environment once; for an existing installation reuse its `.venv`.
+Create the environment once inside the installed folder; reuse its `.venv`
+afterwards. Replace the example path with the installed directory.
 
 **Windows / PowerShell**
 
@@ -116,22 +118,20 @@ ffprobe -version
 "$editPython" -X utf8 "$skillRoot/scripts/edit_project.py" --help
 ```
 
-Use `requirements.txt` for portable dependency resolution.
-`requirements.lock.txt` records the tested Windows/Python 3.12 base environment;
-it is not a universal lockfile and does not include the optional speech stack.
+`requirements.txt` resolves current compatible versions. To reproduce the
+versions the fork was tested with, add `-c requirements.lock.txt` to the
+install command (the lock does not cover the optional speech stack).
 
 ### Optional automatic subtitles
 
-Ask Codex to install `requirements-transcription.txt` in the same environment,
-or run:
+Ask the agent to install `requirements-transcription.txt` in the same
+environment, or run it yourself with the interpreter from above:
 
 ```powershell
-# PowerShell, using the variables above
 & $editPython -m pip install -r (Join-Path $skillRoot 'requirements-transcription.txt')
 ```
 
 ```sh
-# macOS / Linux, using the variables above
 "$editPython" -m pip install -r "$skillRoot/requirements-transcription.txt"
 ```
 
@@ -140,44 +140,50 @@ Whisper model weights download on first use. The default is multilingual
 Models are cached beside the project in `models/` unless `--model-dir` selects
 another location. `--local-files-only` requires an already cached/local model.
 Recognition processes audio locally; it does not upload it to a transcription
-service. Codex itself follows its own model and tool data-handling settings.
+service. The agent itself follows its own model and tool data-handling settings.
 Manual titles and SRT/VTT files do not need Whisper.
 
 ### Updating an existing installation
 
-Back up the installed skill, then ask Codex to update its packaged files from
-this fork while preserving `.venv` and your project/media folders. Install any
-changed requirements afterward. A repository `git pull` alone does not update
-a separately copied skill, and the installer may refuse an existing destination.
+Back up the installed skill, then replace its files with the new
+`skills/beat-sync-edit` while keeping `.venv` and your project/media folders.
+Install any changed requirements afterward. A repository `git pull` alone does
+not update a separately copied skill.
 
-## Use it in Codex
+## Use it
 
-Open a local working folder and give Codex the paths to your footage and music.
-Specify duration, aspect ratio, desired style and any moments to include or
-exclude. Keep working files in `work/` and final exports in `outputs/`, or
-choose your own locations.
+Open a local working folder and give the agent the paths to your footage and
+music. Specify duration, aspect ratio, desired style and any moments to include
+or exclude. Working files go to `work/` and final exports to `outputs/` unless
+you choose other locations. Claude Code picks the skill up from the request (or
+type `/beat-sync-edit`); in Codex start the request with `$beat-sync-edit`.
 
 **A first edit**
 
-> Use $beat-sync-edit. Create a 25-second edit from the videos in this folder
-> set to this track: 9:16, 1080×1920, 30 FPS, cuts on the beat and quick zooms
-> on the drop. Keep natural colors and do not repeat footage. Export MP4.
+> Create a 25-second edit from the videos in this folder set to this track:
+> 9:16, 1080×1920, 30 FPS, cuts on the beat and quick zooms on the drop. Keep
+> natural colors and do not repeat footage. Export MP4.
+
+**A speech short**
+
+> Turn this interview into a 45-second vertical short with the strongest
+> complete answers and burned-in captions.
 
 **Titles and captions**
 
-> Use $beat-sync-edit. Add “A new beginning” for the first two seconds.
-> Transcribe the Russian speech in the final soundtrack, use short captions
-> with a dark background and yellow word highlighting, and export MP4 plus SRT.
+> Add “A new beginning” for the first two seconds. Transcribe the Russian speech
+> in the final soundtrack, use short captions with a dark background and yellow
+> word highlighting, and export MP4 plus SRT.
 
 **Revise an existing edit**
 
-> Use $beat-sync-edit with this project.json. Replace the third shot with a
-> close-up, remove flashes, correct the second caption and keep the total duration.
+> Use this project.json. Replace the third shot with a close-up, remove flashes,
+> correct the second caption and keep the total duration.
 
 **Explicit slow motion**
 
-> Use $beat-sync-edit. Slow the impact down to half speed with frame
-> interpolation. Keep all other shots at normal speed or faster.
+> Slow the impact down to half speed with frame interpolation. Keep all other
+> shots at normal speed or faster.
 
 Slow motion is **off by default**, including presets and shortage handling.
 It requires a direct request in your prompt and optical-flow interpolation.
@@ -190,7 +196,7 @@ artifacts around occlusions or fast motion, so inspect the result.
 
 1. **Index the media.** Probe files, detect scenes, measure motion/brightness,
    generate contact sheets and retain imported ZIP contents.
-2. **Review the content.** Codex or the editor inspects source frames and adds
+2. **Review the content.** The agent or editor inspects source frames and adds
    subject tags, shot sizes and action timestamps. The image statistics alone
    do not identify objects or understand the story.
 3. **Analyze the music.** Detect beats and energy changes, then estimate musical
@@ -211,18 +217,17 @@ text compositing and encoding.
 
 ## Command-line usage
 
-Run these examples from the cloned repository root. Here `python` means an
-interpreter with this repository's requirements installed: for example,
-`& $editPython` in PowerShell or `"$editPython"` in a POSIX shell after setup
-above. Replace input paths with your files. With only the installed skill,
-replace `edit_project.py` with its absolute `scripts/edit_project.py` path.
+The CLI works without an agent. As in `SKILL.md`, `edit_project.py` below means
+`<python> -X utf8 <skill>/scripts/edit_project.py`, where `<skill>` is the
+installed folder (or `skills/beat-sync-edit` in a clone) and `<python>` is its
+`.venv` interpreter. Replace input paths with your files.
 
 ```sh
-python -X utf8 edit_project.py analyze /path/to/footage --work work/library
-python -X utf8 edit_project.py music /path/to/song.wav --duration 25 -o work/beats.json
-python -X utf8 edit_project.py plan --library work/library/library.json --beats work/beats.json --duration 25 --preset cinematic --grade none --size 1080x1920 --fps 30 -o work/project.json
-python -X utf8 edit_project.py preview work/project.json -o work/preview.mp4
-python -X utf8 edit_project.py render work/project.json -o outputs/edit.mp4
+edit_project.py analyze /path/to/footage --work work/library
+edit_project.py music /path/to/song.wav --duration 25 -o work/beats.json
+edit_project.py plan --library work/library/library.json --beats work/beats.json --duration 25 --preset cinematic --grade none --size 1080x1920 --fps 30 -o work/project.json
+edit_project.py preview work/project.json -o work/preview.mp4
+edit_project.py render work/project.json -o outputs/edit.mp4
 ```
 
 For content-aware selection, inspect the contact sheets and apply annotations
@@ -235,16 +240,16 @@ existing caption file **or** transcribing audio; each replaces the subtitle trac
 in a recoverable revision:
 
 ```sh
-python -X utf8 edit_project.py title work/project.json --text "A new beginning" --start 0 --end 2 --animation fade
-python -X utf8 edit_project.py subtitles-import work/project.json /path/to/captions.srt --preset boxed
+edit_project.py title work/project.json --text "A new beginning" --start 0 --end 2 --animation fade
+edit_project.py subtitles-import work/project.json /path/to/captions.srt --preset boxed
 # Alternative to import, after installing the optional speech requirements:
-python -X utf8 edit_project.py subtitles-transcribe work/project.json --language ru --model small --preset karaoke
-python -X utf8 edit_project.py subtitles-export work/project.json -o outputs/captions.vtt
-python -X utf8 edit_project.py render work/project.json -o outputs/captioned.mp4
+edit_project.py subtitles-transcribe work/project.json --language ru --model small --preset karaoke
+edit_project.py subtitles-export work/project.json -o outputs/captions.vtt
+edit_project.py render work/project.json -o outputs/captioned.mp4
 ```
 
-Use `edit_project.py --help` and `<command> --help` for available flags.
-See the [text guide](skills/beat-sync-edit/references/text-and-subtitles.md)
+Use `edit_project.py --help` and `edit_project.py <command> --help` for available
+flags. See the [text and graphics guide](skills/beat-sync-edit/references/text-and-graphics.md)
 for style settings, offsets, model caches and word timestamps.
 
 ## Output and limits
@@ -269,7 +274,7 @@ for style settings, offsets, model caches and word timestamps.
 
 | Problem | What to check |
 |---|---|
-| Skill is missing | Confirm the entire folder is installed in a discovered location; avoid duplicate copies; restart Codex if needed. |
+| Skill is missing | Confirm the entire folder is installed in a discovered location; avoid duplicate copies; restart the agent if needed. |
 | Import/dependency error | Use the skill's `.venv` interpreter and install the matching requirements there. |
 | FFmpeg cannot run or encode | Check both executables on PATH and availability of `libx264`/AAC. |
 | Not enough footage | Add unused clips/photos, shorten the requested edit or explicitly permit repeats. Slow motion needs its own direct request. |
@@ -280,28 +285,30 @@ for style settings, offsets, model caches and word timestamps.
 ## Documentation and development
 
 - [All capabilities and limitations](docs/capabilities.md)
-- [Codex skill instructions](skills/beat-sync-edit/SKILL.md)
-- [Project workflow and revision format](skills/beat-sync-edit/references/project-workflow.md)
-- [Titles, subtitles and speech recognition](skills/beat-sync-edit/references/text-and-subtitles.md)
-- [Speech-first edits and source-bound captions](skills/beat-sync-edit/references/speech-workflow.md)
-- [Audio mixing and music arrangement](skills/beat-sync-edit/references/audio-workflow.md)
+- [Skill instructions (SKILL.md)](skills/beat-sync-edit/SKILL.md)
+- [Music montage projects, revisions, tracking and speed](skills/beat-sync-edit/references/project-workflow.md)
 - [Musical confidence and selection feedback](skills/beat-sync-edit/references/music-editorial.md)
-- [Graphics, tracking review, QA and batch tools](skills/beat-sync-edit/references/workflow-extensions.md)
+- [Speech-first edits and source-bound captions](skills/beat-sync-edit/references/speech-workflow.md)
+- [Titles, captions, speech recognition, styles and graphics](skills/beat-sync-edit/references/text-and-graphics.md)
+- [Audio mixing and music arrangement](skills/beat-sync-edit/references/audio-workflow.md)
+- [Export checks, batch rendering and JSON automation](skills/beat-sync-edit/references/review-and-automation.md)
 - [Finishing tools: flash montage, over-under, custom FFmpeg looks](skills/beat-sync-edit/references/finishing-tools.md)
 
-Root Python files are the source of truth. After changing them, rebuild the
-both installable skill copies. The bundle checker verifies every runtime module
-and detects instruction/reference drift between Codex and Claude Code.
-Run checks with the dependency environment and FFmpeg:
+`skills/beat-sync-edit` is the only source of the skill: edit its `SKILL.md`,
+`references/` and `scripts/` there. `.claude/skills/beat-sync-edit` is a
+generated copy for Claude Code; refresh it after every change with
+`tools/sync_skill.py` (the unit tests fail while it is out of date). Install
+the development environment from `skills/beat-sync-edit/requirements.txt` and
+run the checks with that interpreter and FFmpeg on PATH:
 
 ```sh
-python tools/build_codex_skill.py
-python tools/build_codex_skill.py --check
+python tools/sync_skill.py
 python -X utf8 -m unittest discover -s tests -p "test_*.py"
-python -X utf8 tests/finishing_tools_smoke_test.py
 python -X utf8 tests/project_smoke_test.py
 python -X utf8 tests/text_smoke_test.py
 python -X utf8 tests/music_editorial_smoke.py
+python -X utf8 tests/motion_smoke_test.py
+python -X utf8 tests/finishing_tools_smoke_test.py
 ```
 
 Smoke tests create synthetic media in ignored `work/` folders. They do not need

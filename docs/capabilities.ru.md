@@ -2,7 +2,7 @@
 
 [Русский README](../README.ru.md) · [English README](../README.md) · [English version](capabilities.md)
 
-Это подробное описание возможностей **форка Net2Fox для Codex и Claude Code** проекта
+Это подробное описание возможностей **форка Net2Fox для Claude Code и Codex** проекта
 `beat-synced-edit`. Основной сценарий — сохраняемый монтажный проект, которым
 управляет агент или `edit_project.py`. Несколько отдельных инструментов
 финальной обработки для особых форматов описаны ниже.
@@ -187,7 +187,7 @@
   текст накладывается после сборки изображения.
 
 Установка распознавания, команды, параметры оформления и примеры есть в
-[руководстве по титрам и субтитрам](../skills/beat-sync-edit/references/text-and-subtitles.md).
+[руководстве по тексту и графике](../skills/beat-sync-edit/references/text-and-graphics.md).
 
 ## Правки, превью и выдача результата
 
@@ -286,7 +286,8 @@
 Команды и примеры: [речь](../skills/beat-sync-edit/references/speech-workflow.md),
 [звук](../skills/beat-sync-edit/references/audio-workflow.md),
 [музыка/отбор](../skills/beat-sync-edit/references/music-editorial.md),
-[графика/QA/пакеты](../skills/beat-sync-edit/references/workflow-extensions.md).
+[текст/графика](../skills/beat-sync-edit/references/text-and-graphics.md),
+[проверка/пакеты](../skills/beat-sync-edit/references/review-and-automation.md).
 
 ## Что не входит в скилл
 

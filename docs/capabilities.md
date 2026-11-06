@@ -3,7 +3,7 @@
 [English README](../README.md) · [Русский README](../README.ru.md) · [Русская версия](capabilities.ru.md)
 
 This is the capability reference for **Net2Fox's fork** of `beat-synced-edit`.
-The main workflow is a persistent editing project controlled through Codex, Claude Code or
+The main workflow is a persistent editing project controlled through Claude Code, Codex or
 `edit_project.py`. A few standalone finishing tools for special formats are
 described below.
 
@@ -183,7 +183,7 @@ Important behavior:
 - Text-only changes preserve the base-shot cache and soundtrack. The text layer
   is composited after picture assembly.
 
-See [titles and subtitles](../skills/beat-sync-edit/references/text-and-subtitles.md)
+See [text and graphics](../skills/beat-sync-edit/references/text-and-graphics.md)
 for installation of optional recognition, commands, style flags and examples.
 
 ## Revisions, preview and delivery
@@ -279,7 +279,8 @@ The slow-motion restriction applies to these tools too. See
 Commands and examples: [speech](../skills/beat-sync-edit/references/speech-workflow.md),
 [audio](../skills/beat-sync-edit/references/audio-workflow.md),
 [music/editorial](../skills/beat-sync-edit/references/music-editorial.md),
-[graphics/QA/batch](../skills/beat-sync-edit/references/workflow-extensions.md).
+[text/graphics](../skills/beat-sync-edit/references/text-and-graphics.md),
+[QA/batch](../skills/beat-sync-edit/references/review-and-automation.md).
 
 ## Boundaries
 
