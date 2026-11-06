@@ -14,6 +14,7 @@ import unittest
 import cv2
 import numpy as np
 
+import _paths  # noqa: F401  (makes the skill's scripts importable)
 from edit_project import main
 from project_workspace import read_json, write_json
 from audio_mix import decode_audio

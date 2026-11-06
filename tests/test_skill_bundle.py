@@ -1,4 +1,4 @@
-"""Both agents receive the complete runtime and identical maintained instructions."""
+"""The Claude Code copy of the skill stays identical to the canonical package."""
 from pathlib import Path
 import shutil
 import subprocess
@@ -6,45 +6,61 @@ import sys
 import tempfile
 import unittest
 
+ROOT = Path(__file__).resolve().parents[1]
+TOOL = ROOT / "tools" / "sync_skill.py"
+
+
+def sync(root, *flags):
+    return subprocess.run([sys.executable, str(root / "tools" / "sync_skill.py"), *flags], capture_output=True, text=True)
+
 
 class SkillBundleTests(unittest.TestCase):
-    def test_new_dependencies_resources_and_instruction_drift_are_checked(self):
-        source = Path(__file__).resolve().parents[1]/"tools"/"build_codex_skill.py"
+    def test_repository_claude_copy_matches_the_canonical_skill(self):
+        result = sync(ROOT, "--check")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_sync_detects_drift_new_and_stale_files_and_keeps_environments(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            (root/"tools").mkdir()
-            script = root/"tools"/"build_codex_skill.py"
-            shutil.copyfile(source, script)
-            (root/"entry.py").write_text("import dependency\n")
-            (root/"dependency.py").write_text("VALUE = 42\n")
-            for name in ("LICENSE", "requirements.txt", "requirements.lock.txt", "requirements-transcription.txt"):
-                (root/name).write_text("fixture\n")
-            canonical = root/"skills"/"beat-sync-edit"
-            for directory in (canonical/"references", canonical/"assets"):
-                directory.mkdir(parents=True)
-            (canonical/"SKILL.md").write_text("canonical instructions\n")
-            (canonical/"references"/"workflow.md").write_text("reference\n")
-            (canonical/"assets"/"style.json").write_text("{}\n")
+            (root / "tools").mkdir()
+            shutil.copyfile(TOOL, root / "tools" / "sync_skill.py")
+            (root / "LICENSE").write_text("license\n")
+            skill = root / "skills" / "beat-sync-edit"
+            for directory in ("scripts", "references", "assets"):
+                (skill / directory).mkdir(parents=True)
+            (skill / "SKILL.md").write_text("instructions\n")
+            (skill / "scripts" / "edit_project.py").write_text("import dependency\n")
+            (skill / "scripts" / "dependency.py").write_text("VALUE = 42\n")
+            (skill / "references" / "workflow.md").write_text("reference\n")
+            (skill / "assets" / "style.json").write_text("{}\n")
+            for name in ("requirements.txt", "requirements.lock.txt", "requirements-transcription.txt"):
+                (skill / name).write_text("fixture\n")
 
-            def build(*flags):
-                return subprocess.run([sys.executable, str(script), *flags], capture_output=True, text=True)
+            self.assertNotEqual(sync(root, "--check").returncode, 0)
+            self.assertEqual(sync(root).returncode, 0)
+            self.assertEqual(sync(root, "--check").returncode, 0)
+            mirror = root / ".claude" / "skills" / "beat-sync-edit"
+            for name in ("scripts/edit_project.py", "scripts/dependency.py", "references/workflow.md",
+                         "assets/style.json", "SKILL.md", "requirements.txt"):
+                self.assertEqual((skill / name).read_bytes(), (mirror / name).read_bytes())
+            self.assertEqual((mirror / "LICENSE").read_text(), "license\n")
+            self.assertEqual((skill / "LICENSE").read_text(), "license\n")
 
-            self.assertEqual(build().returncode, 0)
-            self.assertEqual(build("--check").returncode, 0)
-            mirror = root/".claude"/"skills"/"beat-sync-edit"
-            for name in ("scripts/entry.py", "scripts/dependency.py", "references/workflow.md", "assets/style.json", "SKILL.md", "LICENSE"):
-                self.assertEqual((canonical/name).read_bytes(), (mirror/name).read_bytes())
-            (mirror/"SKILL.md").write_text("outdated old workflow\n")
-            self.assertNotEqual(build("--check").returncode, 0)
-            self.assertEqual(build().returncode, 0)
-            (root/"new_runtime.py").write_text("NEW = True\n")
-            self.assertNotEqual(build("--check").returncode, 0)
-            self.assertEqual(build().returncode, 0)
-            (mirror/"scripts"/"stale.py").write_text("stale\n")
-            self.assertNotEqual(build("--check").returncode, 0)
-            self.assertEqual(build().returncode, 0)
-            self.assertFalse((mirror/"scripts"/"stale.py").exists())
-            self.assertEqual(build("--check").returncode, 0)
+            (mirror / "SKILL.md").write_text("outdated old workflow\n")
+            self.assertNotEqual(sync(root, "--check").returncode, 0)
+            self.assertEqual(sync(root).returncode, 0)
+            (skill / "scripts" / "new_runtime.py").write_text("NEW = True\n")
+            self.assertNotEqual(sync(root, "--check").returncode, 0)
+            self.assertEqual(sync(root).returncode, 0)
+
+            (mirror / "scripts" / "stale.py").write_text("stale\n")
+            (mirror / ".venv").mkdir()
+            (mirror / ".venv" / "keep.txt").write_text("environment\n")
+            self.assertNotEqual(sync(root, "--check").returncode, 0)
+            self.assertEqual(sync(root).returncode, 0)
+            self.assertFalse((mirror / "scripts" / "stale.py").exists())
+            self.assertTrue((mirror / ".venv" / "keep.txt").exists())
+            self.assertEqual(sync(root, "--check").returncode, 0)
 
 
 if __name__ == "__main__":

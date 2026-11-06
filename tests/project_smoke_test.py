@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--scripts-dir", type=Path, default=ROOT)
+    parser.add_argument("--scripts-dir", type=Path, default=ROOT / "skills" / "beat-sync-edit" / "scripts")
     parser.add_argument("--work-dir", type=Path, default=ROOT / "work" / "project-smoke")
     args = parser.parse_args()
     scripts, work = args.scripts_dir.resolve(), args.work_dir.resolve()

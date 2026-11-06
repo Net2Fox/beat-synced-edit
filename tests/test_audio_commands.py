@@ -8,6 +8,7 @@ import unittest
 
 import numpy as np
 
+import _paths  # noqa: F401  (makes the skill's scripts importable)
 from audio_commands import register_audio_commands, run_audio_command
 from audio_mix import write_audio
 from project_workspace import read_json, write_json

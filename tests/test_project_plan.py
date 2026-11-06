@@ -3,11 +3,10 @@
 from copy import deepcopy
 import json
 from pathlib import Path
-import sys
 import tempfile
 import unittest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import _paths  # noqa: F401  (makes the skill's scripts importable)
 from edit_presets import get_preset, list_presets
 from project_plan import build_plan, validate_plan, validate_slow_motion_policy, speed_bounds
 

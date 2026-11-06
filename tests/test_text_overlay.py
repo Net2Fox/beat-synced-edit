@@ -1,12 +1,10 @@
 """Pixel-level Unicode typography, safe-area and cue-timing regression tests."""
 import copy
-from pathlib import Path
-import sys
 import unittest
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import _paths  # noqa: F401  (makes the skill's scripts importable)
 from text_overlay import TextCompositor, validate_text_tracks
 
 

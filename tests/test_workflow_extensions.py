@@ -5,14 +5,13 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout, redirect_stderr
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import _paths  # noqa: F401  (makes the skill's scripts importable)
 from project_workspace import read_json, write_json
 from graphics_commands import motion_project
 from graphics_layers import ProjectCompositor, validate_graphics

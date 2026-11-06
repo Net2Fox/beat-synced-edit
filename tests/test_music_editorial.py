@@ -10,6 +10,7 @@ from unittest.mock import patch
 import numpy as np
 from PIL import Image
 
+import _paths  # noqa: F401  (makes the skill's scripts importable)
 from editorial_commands import register_editorial_commands, run_editorial_command
 from editorial_feedback import rank_candidates, record_feedback
 from media_library import analyze_library

@@ -7,6 +7,7 @@ import unittest
 
 import numpy as np
 
+import _paths  # noqa: F401  (makes the skill's scripts importable)
 from audio_mix import SAMPLE_RATE as SR, decode_audio, write_audio
 from music_arrangement import arrange_music, arrangement_plan, verify_arrangement
 

@@ -1,7 +1,6 @@
 """Meaningful timing, transcript, revision and audible speech invariants."""
 from copy import deepcopy
 from pathlib import Path
-import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -9,7 +8,7 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import _paths  # noqa: F401  (makes the skill's scripts importable)
 from timeline_map import source_times, inverse_source_times, source_to_output, output_to_source, resolve_anchor
 from speech_project import normalize_transcript, import_transcript, phrase_candidates, build_speech_plan, refresh_source_captions
 from project_workspace import apply_revisions

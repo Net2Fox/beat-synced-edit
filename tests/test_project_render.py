@@ -3,7 +3,6 @@ import copy
 from pathlib import Path
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -12,7 +11,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import _paths  # noqa: F401  (makes the skill's scripts importable)
 from project_render import (_OpticalFlowPair, _VideoReader, _display_size, _effect_frame,
                             _read_image, probe, render_project, source_times)
 

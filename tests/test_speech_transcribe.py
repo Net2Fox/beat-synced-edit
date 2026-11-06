@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
+import _paths  # noqa: F401  (makes the skill's scripts importable)
 from speech_transcribe import transcribe_audio
 
 

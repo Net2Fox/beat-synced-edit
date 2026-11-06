@@ -5,6 +5,7 @@ import shutil
 import tempfile
 import unittest
 
+import _paths  # noqa: F401  (makes the skill's scripts importable)
 from graphics_commands import motion_project
 from project_workspace import write_json
 from project_render import render_project

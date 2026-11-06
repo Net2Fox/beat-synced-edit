@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+import _paths  # noqa: F401  (makes the skill's scripts importable)
 from cli_contract import fingerprint_inputs
 from project_workspace import write_json
 

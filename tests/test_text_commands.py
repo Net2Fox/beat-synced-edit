@@ -1,13 +1,11 @@
 """Text CLI output paths cannot destroy input media or project files."""
 import argparse
 from pathlib import Path
-import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _paths  # noqa: F401  (makes the skill's scripts importable)
 from project_workspace import write_json
 from test_project_workspace import fixture
 from text_commands import register_text_commands, run_text_command

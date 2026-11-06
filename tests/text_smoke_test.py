@@ -102,7 +102,7 @@ def check_pixels(work):
 def main():
     repository = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--scripts-dir", type=Path, default=repository,
+    parser.add_argument("--scripts-dir", type=Path, default=repository/"skills"/"beat-sync-edit"/"scripts",
                         help="Directory containing edit_project.py and its companion modules")
     parser.add_argument("--work-dir", type=Path, default=repository/"work/text-smoke",
                         help="Directory for synthetic inputs, outputs, cache and logs")

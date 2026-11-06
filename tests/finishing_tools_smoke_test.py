@@ -20,7 +20,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--scripts-dir', type=Path, default=ROOT)
+parser.add_argument('--scripts-dir', type=Path, default=ROOT / 'skills/beat-sync-edit/scripts')
 parser.add_argument('--work-dir', type=Path, default=ROOT / 'work/finishing-smoke')
 args = parser.parse_args()
 scripts = args.scripts_dir.resolve()

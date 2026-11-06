@@ -3,6 +3,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+import _paths  # noqa: F401  (makes the skill's scripts importable)
 from subtitle_tools import export_subtitles, import_subtitles, segment_transcript
 
 

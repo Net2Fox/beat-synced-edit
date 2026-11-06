@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 import stat
 import subprocess
-import sys
 import tempfile
 import unittest
 import zipfile
@@ -13,7 +12,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import _paths  # noqa: F401  (makes the skill's scripts importable)
 from media_library import analyze_library, apply_annotations, discover_media, extract_zip, probe_media
 
 

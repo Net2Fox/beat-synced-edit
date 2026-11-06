@@ -1,7 +1,6 @@
 """Tracking and crop checks against a real moving synthetic subject."""
 
 from pathlib import Path
-import sys
 import tempfile
 import unittest
 
@@ -9,7 +8,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import _paths  # noqa: F401  (makes the skill's scripts importable)
 from smart_reframe import crop_frame, track_subject
 
 
