@@ -398,7 +398,7 @@ def validate_slow_motion_policy(plan):
 
 
 def _clip_explanation(clip, section, recipe, selected, recent, requested_tags, slot_index,
-                      profile=None, query="", model=None):
+                      profile=None, query=""):
     tags = {str(tag).casefold() for tag in clip.get("tags", [])}
     target = recipe["energy"].get(section, .4)
     components = {"energy_match": 2.0 - abs(float(clip.get("energy", .5)) - target) * 2,
@@ -423,7 +423,7 @@ def _clip_explanation(clip, section, recipe, selected, recent, requested_tags, s
             components["visual_similarity"] -= 3.0 if distance <= 4 else (1.0 if distance <= 10 else 0.0)
         if str(previous["asset_id"]) == str(clip["asset_id"]):
             components["source_diversity"] -= .3
-    return explain_candidate(clip, sum(components.values()), components, profile, query, model)
+    return explain_candidate(clip, sum(components.values()), components, profile, query)
 
 
 def _clip_score(clip, section, recipe, selected, recent, requested_tags, slot_index):
@@ -456,9 +456,6 @@ def build_plan(beatmap, library, duration=25, preset="cinematic", fps=30,
     query = config.get("query", "")
     if not isinstance(query, str):
         raise ValueError("query must be text")
-    editorial_model = config.get("editorial_model")
-    if editorial_model and "model" in editorial_model:
-        editorial_model = editorial_model["model"]
     recipe = get_preset(preset)
     for name in ("min_shot", "max_shot"):
         if name in config and config[name] is not None:
@@ -639,7 +636,7 @@ def build_plan(beatmap, library, duration=25, preset="cinematic", fps=30,
                     capacity = wanted_frames if clip["kind"] == "image" else math.floor((end - begin) / capacity_rate * fps + 1e-6)
                     if capacity <= 0:
                         continue
-                    score = _clip_explanation(clip, section, recipe, selected, selected, requested_tags, len(edits), preferences, query, editorial_model)["score"]
+                    score = _clip_explanation(clip, section, recipe, selected, selected, requested_tags, len(edits), preferences, query)["score"]
                     ideal_capacity = wanted_frames if clip["kind"] == "image" else math.floor((end - begin) / effective_rate * fps + 1e-6)
                     options.append((ideal_capacity >= wanted_frames, capacity >= wanted_frames, score, min(capacity, wanted_frames), -index, clip, begin, end))
             if not options:
@@ -741,14 +738,14 @@ def build_plan(beatmap, library, duration=25, preset="cinematic", fps=30,
                     "section": section, "effects": effects, "speed_points": curve,
                     "average_speed": (end - begin) / output_duration, "reframe": reframe,
                     "tags": deepcopy(clip.get("tags", [])), "shot_type": _shot_type(clip.get("shot_type", "unknown"))}
-            explanation = _clip_explanation(clip, section, recipe, selected, selected, requested_tags, len(edits), preferences, query, editorial_model)
+            explanation = _clip_explanation(clip, section, recipe, selected, selected, requested_tags, len(edits), preferences, query)
             alternatives, seen_alternatives = [], {str(clip["id"])}
             for option in sorted(options, key=lambda option: option[:5], reverse=True):
                 candidate = option[5]
                 if str(candidate["id"]) in seen_alternatives:
                     continue
                 seen_alternatives.add(str(candidate["id"]))
-                alternative = _clip_explanation(candidate, section, recipe, selected, selected, requested_tags, len(edits), preferences, query, editorial_model)
+                alternative = _clip_explanation(candidate, section, recipe, selected, selected, requested_tags, len(edits), preferences, query)
                 alternative["available_source"] = [option[6], option[7]] if candidate["kind"] == "video" else None
                 alternative["fits_slot"] = bool(option[0])
                 alternatives.append(alternative)
@@ -779,7 +776,7 @@ def build_plan(beatmap, library, duration=25, preset="cinematic", fps=30,
             "duration": actual_duration, "requested_duration": duration, "preset": preset,
             "sections": musical_sections, "beat_frames": beat_frames, "assets": deepcopy(library["assets"]),
             "clips": clips, "edits": edits, "diagnostics": diagnostics, "music_structure": structure,
-            "editorial": {"query": query, "preferences": deepcopy(preferences), "model": deepcopy(editorial_model)},
+            "editorial": {"query": query, "preferences": deepcopy(preferences)},
             "policies": {"allow_repeats": allow_repeats, "shortage": shortage,
                          "min_speed": min_speed, "max_speed": max_speed, **slow_policy}}
     validate_plan(plan)

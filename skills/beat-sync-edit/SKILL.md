@@ -44,7 +44,7 @@ For new work, use **scripts/edit_project.py**. Select the planner from the task:
 | Interview, lesson, podcast or speech short | [speech workflow](references/speech-workflow.md): transcript-led selection, correctable words, preserved speech and B-roll. |
 | Local animated titles/cards/charts or supplied Remotion composition | [workflow extensions](references/workflow-extensions.md): editable graphic layers, local motion assets and optional Remotion rendering. |
 | Original sound + voice + music + SFX | [audio workflow](references/audio-workflow.md): gains, fades, ducking, measured normalization and music arrangement. |
-| Improve selection, correct musical structure, evaluate edits | [music and editorial review](references/music-editorial.md): confidence, phrase flow, preferences, alternatives, feedback and held-out calibration. |
+| Improve selection, correct musical structure | [music and editorial review](references/music-editorial.md): confidence, phrase flow, preferences, alternatives and feedback. |
 | Captions/titles in an existing edit | [text and subtitles](references/text-and-subtitles.md); use the speech reference for source-bound words/translations. |
 | Tracking correction, style, export QA, dry run or batch work | [workflow extensions](references/workflow-extensions.md). |
 
@@ -109,9 +109,7 @@ word/action/shot/beat/event anchors for overlays and sounds that must survive
 revisions. Record accepted/rejected source moments only after reviewing them;
 never fabricate user feedback to improve a score.
 
-For repeated evaluation use the real-media manifest workflow. Synthetic fixtures
-verify mechanics, not real-world tracking identity, ASR accuracy or editorial
-quality. A missing or unreviewed case remains unverified. Do not promise virality.
+Do not promise virality.
 
 ## Existing projects and specialized effects
 

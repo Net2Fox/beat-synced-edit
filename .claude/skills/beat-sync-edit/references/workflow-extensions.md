@@ -155,6 +155,5 @@ or permission system. Save plans outside any directory being analyzed. No shell
 command string from the plan is executed. A normal `--dry-run` creates no files;
 adding `--plan` intentionally writes just the execution plan.
 
-For real-material evaluation manifests and calibration see
-[music-editorial.md](music-editorial.md); for source-time word/shot/beat/
-action anchors see [speech-workflow.md](speech-workflow.md).
+For source-time word/shot/beat/action anchors see
+[speech-workflow.md](speech-workflow.md).

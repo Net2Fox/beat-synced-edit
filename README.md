@@ -20,14 +20,14 @@ new footage. The Python tools can also run directly without an agent.
 | Speech shorts | Select complete phrases, preserve useful pauses and original speech under B-roll; correct stable words and import translations. |
 | Audio | Source/voice/music/SFX tracks, fades, speech ducking, measured loudness and optional bar-based music arrangement. |
 | Mixed media | Combines videos and still images from files, folders or ZIP archives. |
-| Content-aware selection | Reviewed annotations, explained scores, alternatives, query/preferences, persistent accept/reject feedback and held-out calibration. |
+| Content-aware selection | Reviewed annotations, explained scores, alternatives, query/preferences and persistent accept/reject feedback. |
 | Framing | Vertical, square or horizontal output; tracking diagnostics, manual camera keyframes, fixed crops and letterboxing. |
 | Graphic compositions | Reusable styles/safe areas, local editable cards/counters/overlays, and an optional Remotion composition adapter. |
 | Looks and accents | Four editable presets, color grades, punch-ins, flashes, shake and photo motion. |
 | Speed control | At least 1× playback by default. Explicitly requested slow motion uses optical-flow interpolation. |
 | Text | Animated titles, styled captions, SRT/VTT import/export and optional local speech recognition with word highlighting. |
 | Revisions | Save a project, preview it, replace or reorder shots, revise text and reuse unchanged shot caches. |
-| Export and review | H.264/AAC MP4, decode/audio/black-frame QA, contact sheets, input-bound execution plans, batch caches and real-media review manifests. |
+| Export and review | H.264/AAC MP4, decode/audio/black-frame QA, contact sheets, input-bound execution plans and batch caches. |
 
 See the [complete capability guide](docs/capabilities.md) for every supported
 workflow, preset differences, examples and practical limits, including the
@@ -284,7 +284,7 @@ for style settings, offsets, model caches and word timestamps.
 - [Titles, subtitles and speech recognition](skills/beat-sync-edit/references/text-and-subtitles.md)
 - [Speech-first edits and source-bound captions](skills/beat-sync-edit/references/speech-workflow.md)
 - [Audio mixing and music arrangement](skills/beat-sync-edit/references/audio-workflow.md)
-- [Musical confidence, selection feedback and evaluation](skills/beat-sync-edit/references/music-editorial.md)
+- [Musical confidence and selection feedback](skills/beat-sync-edit/references/music-editorial.md)
 - [Graphics, tracking review, QA and batch tools](skills/beat-sync-edit/references/workflow-extensions.md)
 - [Finishing tools: flash montage, over-under, custom FFmpeg looks](skills/beat-sync-edit/references/finishing-tools.md)
 
@@ -305,10 +305,9 @@ python -X utf8 tests/music_editorial_smoke.py
 
 Smoke tests create synthetic media in ignored `work/` folders. They do not need
 personal footage or download speech models. Each smoke test accepts
-`--scripts-dir` to verify an installed copy. These are local checks, not a claim of CI coverage on every platform.
-Synthetic fixtures do not establish real-world ASR accuracy, subject identity,
-musical taste or editorial quality. Real-media manifests remain `not_reviewed`
-or `missing_materials` until the relevant sources and actual review are supplied.
+`--scripts-dir` to verify an installed copy. These are local checks, not a claim
+of CI coverage on every platform. Synthetic fixtures do not establish real-world
+ASR accuracy, subject identity, musical taste or editorial quality.
 
 ## Original project and license
 

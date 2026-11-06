@@ -15,9 +15,9 @@ from render_qa import file_hash
 SCHEMA = "beat-sync.cli.v1"
 PLAN_SCHEMA = "beat-sync.execution-plan.v1"
 OUTPUT_KEYS = {"output", "work", "cache", "html", "download_root", "model_dir", "beats_output", "render", "plan_file"}
-INPUT_KEYS = {"project", "library", "beats", "audio", "media", "video", "source", "file", "spec", "inputs", "projects", "manifest",
+INPUT_KEYS = {"project", "library", "beats", "audio", "media", "video", "source", "file", "spec", "inputs", "manifest",
               "annotations", "operations", "config", "layers", "keyframes", "sections", "words", "transcript", "translations",
-              "glossary", "preferences", "music_overrides", "editorial_model", "feedback", "candidates", "segments", "corrections", "report", "observations", "labels", "beatmap", "profile", "overrides", "font", "anchor"}
+              "glossary", "preferences", "music_overrides", "feedback", "candidates", "segments", "corrections", "report", "observations", "beatmap", "profile", "overrides", "font", "anchor"}
 PATH_KEYS = {"source", "path", "font", "library", "beatmap", "project", "transcript", "words_path", "file", "audio_path", "render"}
 
 
@@ -93,15 +93,11 @@ def fingerprint_inputs(args, hash_files=True):
             nested(data)
 
     for key, value in vars(args).items():
-        if key == "render" and getattr(args, "command", None) == "review-manifest":
-            for path in value or []:
-                visit(path, required=True)
-            continue
         if key == "model" and value:
-            # Editorial models are JSON inputs. Whisper also accepts a model
-            # name; only an existing local model is a file/directory input.
+            # Whisper accepts a model name; only an existing local model is a
+            # file/directory input.
             local = Path(value).expanduser()
-            if getattr(args, "command", None) == "candidates" or local.exists() or local.is_absolute() or str(value).startswith((".", "~")):
+            if local.exists() or local.is_absolute() or str(value).startswith((".", "~")):
                 visit(local, required=True)
             continue
         if key == "transcript" and getattr(args, "command", None) in ("transcribe", "subtitles-transcribe"):
@@ -131,8 +127,7 @@ def guard_command_outputs(args):
     if args.command == "review-export":
         allowed.add(Path(args.report).resolve())
     destinations = [(key, Path(value).resolve()) for key, value in vars(args).items()
-                    if key in {"output", "html", "render", "beats_output"} and value
-                    and not (key == "render" and args.command == "review-manifest")]
+                    if key in {"output", "html", "render", "beats_output"} and value]
     if args.command == "preview" and not args.html:
         destinations.append(("html", Path(args.output).resolve().with_suffix(".html")))
     if args.command == "feedback":
@@ -172,8 +167,7 @@ def prepare_plan(args, argv):
     result = {"schema": PLAN_SCHEMA, "cwd": str(Path.cwd()), "argv": clean_argv(argv),
               "command": args.command, "tool": tool_signature(), "inputs": inputs,
               "execution_status": "not_executed", "validation": "syntax, saved project and input fingerprints",
-              "outputs": {k: v for k, v in vars(args).items() if k in OUTPUT_KEYS and k != "plan_file" and v
-                          and not (k == "render" and args.command == "review-manifest")}}
+              "outputs": {k: v for k, v in vars(args).items() if k in OUTPUT_KEYS and k != "plan_file" and v}}
     if getattr(args, "plan_file", None):
         destination = Path(args.plan_file).resolve()
         if str(destination) in inputs["files"]:

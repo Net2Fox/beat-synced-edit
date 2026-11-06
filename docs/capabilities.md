@@ -259,9 +259,8 @@ The slow-motion restriction applies to these tools too. See
   the map; grid accuracy still requires listening.
 - **Selection:** per-shot score components, source evidence and alternatives;
   reviewed query terms and explicit preference weights affect planning. Audited
-  accept/reject/clear decisions persist. Calibration splits independent sources
-  before training and reports held-out metrics and a baseline. It produces no
-  model for insufficient data and makes no virality claim.
+  accept/reject/clear decisions persist. Scores rank candidates; they make no
+  virality claim.
 - **Graphics:** reusable styles, safe text zones and character-coverage
   diagnostics; local animated cards, counters, progress bars and image/text
   layers. A motion specification can render a reusable MP4. The optional
@@ -274,11 +273,8 @@ The slow-motion restriction applies to these tools too. See
   plans, provenance, batch analysis/render with shared caches. Export QA decodes
   media, measures audio and black/silent intervals, and writes review frames.
   Intentional black/silence ranges are explicit rather than silently ignored.
-- **Real-media evaluation:** reusable source/project-hashed cases for multiple
-  subjects, occlusions/fast motion, quiet speech, names/languages, variable FPS and
-  ambiguous music. Missed and false selections are evaluated against supplied
-  labels. Missing or unreviewed cases do not pass. Synthetic tests establish
-  deterministic mechanics, not artistic quality or real ASR/tracking accuracy.
+- **Testing scope:** synthetic tests establish deterministic mechanics, not
+  artistic quality or real ASR/tracking accuracy.
 
 Commands and examples: [speech](../skills/beat-sync-edit/references/speech-workflow.md),
 [audio](../skills/beat-sync-edit/references/audio-workflow.md),

@@ -1,4 +1,4 @@
-# Musical structure, selection and evaluation
+# Musical structure and selection
 
 All commands below use `python -X utf8 scripts/edit_project.py` in an installed
 skill, or `python -X utf8 edit_project.py` from the repository. Use absolute media
@@ -70,8 +70,7 @@ the user has not requested; feedback is a separate reviewed observation.
 ```sh
 python edit_project.py feedback library.json --profile profile.json --clip CLIP_ID --decision reject --reason "The subject is occluded" --reviewer editor
 python edit_project.py feedback library.json --profile profile.json --clip CLIP_ID --decision clear --reason "Corrected framing reviewed" --reviewer editor
-python edit_project.py calibrate profile.json --holdout .25 -o model-report.json
-python edit_project.py plan --library library.json --beats beats.json --duration 25 --preferences profile.json --editorial-model model-report.json -o project.json
+python edit_project.py plan --library library.json --beats beats.json --duration 25 --preferences profile.json -o project.json
 ```
 
 Accept boosts the exact candidate, reject excludes it, clear reverses a prior
@@ -79,56 +78,6 @@ decision. Records include content/range identity, features, reviewer, reason,
 timestamp and previous event ID. Source content hashes prevent stale decisions
 applying to replaced media. Feedback never edits the original media.
 
-Calibration needs six decisions across at least three independent source files
-and both classes. Source groups are split before training; vocabulary and model
-fit use train groups only. The saved model is that evaluated model, not a refit
-on all data. Report confusion counts, precision, recall, accuracy, Brier score,
-baseline and sample counts. An insufficient dataset produces no model. Small
-personal datasets do not establish artistic quality or likely popularity.
-
-## Missed moments and false selections
-
-Create labels after inspecting the material:
-
-```json
-{
-  "labels": [
-    {"id": "good-drift", "asset_id": "asset-id", "start": 4, "end": 5, "decision": "accept"},
-    {"id": "blurred", "clip_id": "clip-id", "decision": "reject"}
-  ]
-}
-```
-
-`evaluate-selection project.json --labels labels.json -o evaluation.json` reports
-chosen positive moments, missed positives, selected negatives, correct rejections
-and unreviewed shots. A time range is considered selected at >=50% overlap by
-default (`--minimum-overlap`). Unknown material is never counted as a negative.
-
-## Reusable real-media review
-
-```sh
-python edit_project.py review-manifest project.json --render export.mp4 --kind real --scenario multiple-people -o review.json
-python edit_project.py evaluate-manifest review.json -o report.json
-python edit_project.py record-case-review review.json --case case-001 --observations observations.json --reviewer editor --notes "Watched the export and sources" --labels labels.json
-```
-
-Available scenarios: musical-edit, multiple-people, fast-motion, quiet-speech,
-names-and-languages, variable-frame-rate and ambiguous-rhythm. Each defines
-explicit review checks. `observations.json` must provide every required check as
-`pass`, `fail` or `not_reviewed`. Supply observations only after actual review.
-For `multiple-people`, for example:
-
-```json
-{"crop_identity": "pass", "occlusion_recovery": "not_reviewed", "chosen_actions": "pass"}
-```
-
-The manifest binds project, source and rendered-video hashes. Repeat `--render`
-in project order for multiple cases. Cases without an exported video cannot
-become reviewed. Changed inputs are `stale`; absent
-material is `missing_materials`; absent observations remain `not_reviewed`.
-Distance of cuts to supplied beats is measured separately and does not verify
-the beat map by listening. Synthetic cases stay labeled synthetic.
-
 Media analysis uses a content-addressed cache including analyzer/dependency
-identity and thumbnail hashes. Cached measurements are reused across batch
-analysis; semantic annotations are freshly applied, never silently cached.
+identity and thumbnail hashes. Cached measurements are reused across `analyze`
+runs; semantic annotations are freshly applied, never silently cached.

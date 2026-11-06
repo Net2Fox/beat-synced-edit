@@ -95,23 +95,6 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(inspect_font(font, "Hello Привет 123")["status"], "pass")
         self.assertEqual(inspect_font(font, chr(0x10ffff))["status"], "fail")
 
-    def test_public_review_manifest_binds_export_and_graphic_inputs(self):
-        from editorial_commands import evaluate_manifest
-        plan = motion_project(spec(), self.root / "project.json")
-        image = self.root / "overlay.png"
-        image.write_bytes(Path(plan["edits"][0]["source"]).read_bytes())
-        plan["graphics"] = [{"id": "overlay", "kind": "image", "source": str(image), "start_frame": 0, "end_frame": 24}]
-        write_json(self.root / "project.json", plan)
-        exported = self.root / "export.mp4"
-        exported.write_bytes(b"hash fixture only; no claim of decodable video")
-        destination = self.root / "manifest.json"
-        args = parser().parse_args(["review-manifest", str(self.root / "project.json"), "--kind", "synthetic",
-                                    "--render", str(exported), "-o", str(destination)])
-        result = run(args)
-        self.assertEqual(evaluate_manifest(result)["cases"][0]["status"], "not_reviewed")
-        image.write_bytes(image.read_bytes() + b"changed")
-        self.assertEqual(evaluate_manifest(result)["cases"][0]["status"], "stale")
-
     def test_remotion_exports_editable_source_and_protects_edits(self):
         from remotion_adapter import export_composition
         folder = self.root / "react"

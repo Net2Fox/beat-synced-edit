@@ -74,7 +74,6 @@ def parser():
     plan.add_argument("--music-overrides", help="Reviewed musical events/phrases JSON")
     plan.add_argument("--preferences", help="Editorial preferences JSON")
     plan.add_argument("--query", default="", help="Requested content for reviewed semantic candidates")
-    plan.add_argument("--editorial-model", help="Calibrated feature-weight model JSON")
     plan.add_argument("--reframe", choices=["auto", "center", "manual", "contain"], default="auto")
     plan.add_argument("--subject", type=float, nargs=4, metavar=("X", "Y", "WIDTH", "HEIGHT"))
     plan.add_argument("-o", "--output", required=True)
@@ -178,7 +177,6 @@ def run(args):
                             pacing_mode=args.pacing_mode, query=args.query,
                             music_overrides=read_json(args.music_overrides) if args.music_overrides else None,
                             preferences=read_json(args.preferences) if args.preferences else None,
-                            editorial_model=read_json(args.editorial_model) if args.editorial_model else None,
                             sections=read_json(args.sections) if args.sections else None, **overrides)
         for shot in result["edits"]:
             shot.setdefault("reframe", {})["mode"] = args.reframe
