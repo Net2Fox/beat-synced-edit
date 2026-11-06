@@ -17,7 +17,7 @@ class SkillBundleTests(unittest.TestCase):
             shutil.copyfile(source, script)
             (root/"entry.py").write_text("import dependency\n")
             (root/"dependency.py").write_text("VALUE = 42\n")
-            for name in ("LICENSE", "requirements.txt", "requirements.lock.txt", "requirements-transcription.txt", "UPSTREAM.json"):
+            for name in ("LICENSE", "requirements.txt", "requirements.lock.txt", "requirements-transcription.txt"):
                 (root/name).write_text("fixture\n")
             canonical = root/"skills"/"beat-sync-edit"
             for directory in (canonical/"references", canonical/"assets"):

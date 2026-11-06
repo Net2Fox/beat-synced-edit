@@ -253,9 +253,10 @@ for style settings, offsets, model caches and word timestamps.
   Insufficient footage produces an error or uses permitted alternatives; the
   planner does not introduce unrequested slow motion or repeats, or shorten
   the requested output to hide a shortage.
-- The project renderer uses the selected soundtrack. It does not retain or
-  mix source-clip audio; supplying a separate file for transcription does not
-  add that audio to the edit.
+- Music projects play the selected soundtrack; source-clip audio is mixed in
+  only when `audio-config` enables `source_audio` or adds tracks. Speech
+  projects keep the original speech by default. An `--audio` file given to
+  `subtitles-transcribe` is used only for recognition, not added to the mix.
 - Captions are burned into MP4. SRT/VTT sidecars carry text and cue times, not
   animations or word highlighting; MP4 subtitles are not switchable tracks.
 - Musical sections, tracking and transcripts need review. Recognition may
@@ -314,7 +315,10 @@ ASR accuracy, subject identity, musical taste or editorial quality.
 This fork builds on [ZiadAbdelkarim/beat-synced-edit](https://github.com/ZiadAbdelkarim/beat-synced-edit).
 The original README is preserved **unchanged** in [README.upstream.md](README.upstream.md),
 from upstream commit
-[`48c09c9`](https://github.com/ZiadAbdelkarim/beat-synced-edit/blob/48c09c92ee69c2d89b7e44b146bbd7b9c26fff08/README.md).
+[`48c09c9`](https://github.com/ZiadAbdelkarim/beat-synced-edit/blob/48c09c92ee69c2d89b7e44b146bbd7b9c26fff08/README.md);
+its demo videos remain in the upstream
+[`examples/`](https://github.com/ZiadAbdelkarim/beat-synced-edit/tree/48c09c92ee69c2d89b7e44b146bbd7b9c26fff08/examples)
+folder.
 Its demonstrations describe the original project. This fork removed the original
 JSON EDL pipeline (`clip_tag.py`, `plan_edit.py`, `render_edit.py`,
 `vertical_style.py`); `flash_montage.py` and `overunder_stack.py` remain as

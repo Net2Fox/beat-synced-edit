@@ -266,9 +266,11 @@ python -X utf8 edit_project.py render work/project.json -o outputs/captioned.mp4
   это 750 кадров. При нехватке исходников возникает ошибка либо используются
   разрешённые альтернативы; планировщик не вводит незапрошенное замедление
   или повторы и не сокращает заданную длительность ради нехватки материала.
-- Рендерер проекта использует выбранную звуковую дорожку. Он не сохраняет
-  и не смешивает звук из исходных клипов; отдельный файл для распознавания
-  речи сам по себе не добавляет этот звук в монтаж.
+- Музыкальные проекты звучат выбранной дорожкой; звук исходных клипов
+  добавляется, только если `audio-config` включает `source_audio` или
+  добавляет дорожки. Речевые проекты по умолчанию сохраняют исходную речь.
+  Файл `--audio` для `subtitles-transcribe` используется только для
+  распознавания и в монтаж не добавляется.
 - Субтитры встраиваются в изображение MP4. Отдельные SRT/VTT содержат текст
   и время показа, но не анимацию и подсветку слов; переключаемых дорожек
   субтитров в MP4 нет.
@@ -331,7 +333,10 @@ python -X utf8 tests/music_editorial_smoke.py
 Этот форк основан на [ZiadAbdelkarim/beat-synced-edit](https://github.com/ZiadAbdelkarim/beat-synced-edit).
 Оригинальный README сохранён **без изменений** в [README.upstream.md](README.upstream.md)
 из коммита
-[`48c09c9`](https://github.com/ZiadAbdelkarim/beat-synced-edit/blob/48c09c92ee69c2d89b7e44b146bbd7b9c26fff08/README.md).
+[`48c09c9`](https://github.com/ZiadAbdelkarim/beat-synced-edit/blob/48c09c92ee69c2d89b7e44b146bbd7b9c26fff08/README.md);
+демонстрационные видео остались в папке
+[`examples/`](https://github.com/ZiadAbdelkarim/beat-synced-edit/tree/48c09c92ee69c2d89b7e44b146bbd7b9c26fff08/examples)
+оригинального репозитория.
 Его демонстрации относятся к оригинальному проекту. Прежний конвейер JSON EDL
 (`clip_tag.py`, `plan_edit.py`, `render_edit.py`, `vertical_style.py`) из форка
 удалён; `flash_montage.py` и `overunder_stack.py` остались инструментами

@@ -12,7 +12,7 @@ CLAUDE = ROOT / ".claude" / "skills" / "beat-sync-edit"
 # tests/, tools/ and work/. Discovery prevents newly imported runtime helpers from
 # being accidentally omitted from an otherwise apparently healthy package.
 SCRIPTS = tuple(sorted(path.name for path in ROOT.glob("*.py")))
-RESOURCES = ("LICENSE", "requirements.txt", "requirements.lock.txt", "requirements-transcription.txt", "UPSTREAM.json")
+RESOURCES = ("LICENSE", "requirements.txt", "requirements.lock.txt", "requirements-transcription.txt")
 
 
 def main():
