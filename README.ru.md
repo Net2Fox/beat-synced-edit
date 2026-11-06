@@ -23,7 +23,7 @@
 | Звук | Исходный звук, речь, музыка и SFX, плавные входы/выходы, приглушение музыки под речь, измерение громкости и перестановка музыки по тактам. |
 | Смешанные материалы | Объединение видео и фотографий из отдельных файлов, папок и ZIP-архивов. |
 | Подбор кадров по содержанию | Проверенные аннотации, объяснение оценок и альтернативы, запрос и предпочтения, история принятых/отклонённых кадров. |
-| Кадрирование | Любой формат; диагностика трекинга, ручные ключевые кадры камеры, фиксированный кроп и вписывание с полями. |
+| Кадрирование | Вертикальный, квадратный или горизонтальный формат; диагностика трекинга, ручные ключевые кадры камеры, фиксированный кроп и вписывание с полями. |
 | Графика | Сохраняемые стили и безопасные зоны текста, локальные карточки/счётчики/слои и необязательный адаптер Remotion. |
 | Стилизация и акценты | Четыре настраиваемых пресета, цветокоррекция, короткие зумы, вспышки, тряска и движение фотографий. |
 | Управление скоростью | По умолчанию — воспроизведение со скоростью не ниже 1×. Замедление только по прямому запросу, с интерполяцией по оптическому потоку. |
@@ -122,10 +122,18 @@ ffprobe -version
 "$editPython" -X utf8 "$skillRoot/scripts/edit_project.py" --help
 ```
 
-`requirements.txt` устанавливает актуальные совместимые версии. Чтобы
-повторить версии, с которыми форк проверялся, добавьте к команде установки
-`-c requirements.lock.txt` (дополнительные зависимости для распознавания речи
-в нём не учтены).
+`requirements.txt` устанавливает актуальные совместимые версии.
+`requirements.lock.txt` фиксирует окружение, проверенное на Windows
+с Python 3.12 (зависимости для распознавания речи в нём не учтены). Чтобы
+установить именно эти версии, используйте его как ограничение:
+
+```powershell
+& $editPython -m pip install -r (Join-Path $skillRoot 'requirements.txt') -c (Join-Path $skillRoot 'requirements.lock.txt')
+```
+
+```sh
+"$editPython" -m pip install -r "$skillRoot/requirements.txt" -c "$skillRoot/requirements.lock.txt"
+```
 
 ### Автоматические субтитры — по желанию
 
@@ -151,10 +159,29 @@ ffprobe -version
 
 ### Обновление существующей установки
 
-Сделайте резервную копию установленного скилла, затем замените его файлы
-новой папкой `skills/beat-sync-edit`, сохранив `.venv` и папки проектов
-с исходниками. После этого установите изменившиеся зависимости. Один лишь
-`git pull` в репозитории не обновляет отдельно скопированный скилл.
+Новые версии удаляют файлы, которые были в прежних (например,
+`references/legacy-workflow.md`, `scripts/render_edit.py` и `UPSTREAM.json`),
+поэтому при копировании новой папки поверх старой они останутся. Сделайте
+резервную копию установленного скилла, удалите в нём всё, кроме `.venv` и
+своих папок, скопируйте новую папку `skills/beat-sync-edit` и установите
+изменившиеся зависимости. Один лишь `git pull` в репозитории не обновляет
+отдельно скопированный скилл.
+
+```sh
+skillRoot='/path/to/installed/beat-sync-edit'
+newSkill='/path/to/beat-synced-edit/skills/beat-sync-edit'
+rm -rf "$skillRoot/SKILL.md" "$skillRoot/UPSTREAM.json" "$skillRoot/scripts" "$skillRoot/references"
+cp -R "$newSkill/." "$skillRoot/"
+"$skillRoot/.venv/bin/python" -m pip install -r "$skillRoot/requirements.txt"
+```
+
+```powershell
+$skillRoot = 'C:/path/to/installed/beat-sync-edit'
+$newSkill = 'C:/path/to/beat-synced-edit/skills/beat-sync-edit'
+'SKILL.md','UPSTREAM.json','scripts','references' | ForEach-Object { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $skillRoot $_) }
+Copy-Item -Recurse -Force (Join-Path $newSkill '*') $skillRoot
+& (Join-Path $skillRoot '.venv/Scripts/python.exe') -m pip install -r (Join-Path $skillRoot 'requirements.txt')
+```
 
 ## Использование
 

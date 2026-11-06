@@ -118,9 +118,18 @@ ffprobe -version
 "$editPython" -X utf8 "$skillRoot/scripts/edit_project.py" --help
 ```
 
-`requirements.txt` resolves current compatible versions. To reproduce the
-versions the fork was tested with, add `-c requirements.lock.txt` to the
-install command (the lock does not cover the optional speech stack).
+`requirements.txt` resolves current compatible versions.
+`requirements.lock.txt` records the environment tested on Windows with
+Python 3.12 (it does not cover the optional speech stack). To install those
+versions, use it as a constraint:
+
+```powershell
+& $editPython -m pip install -r (Join-Path $skillRoot 'requirements.txt') -c (Join-Path $skillRoot 'requirements.lock.txt')
+```
+
+```sh
+"$editPython" -m pip install -r "$skillRoot/requirements.txt" -c "$skillRoot/requirements.lock.txt"
+```
 
 ### Optional automatic subtitles
 
@@ -145,10 +154,29 @@ Manual titles and SRT/VTT files do not need Whisper.
 
 ### Updating an existing installation
 
-Back up the installed skill, then replace its files with the new
-`skills/beat-sync-edit` while keeping `.venv` and your project/media folders.
-Install any changed requirements afterward. A repository `git pull` alone does
-not update a separately copied skill.
+Newer versions remove files that older ones shipped (for example
+`references/legacy-workflow.md`, `scripts/render_edit.py` and `UPSTREAM.json`),
+so copying the new folder over an old installation leaves stale files behind.
+Back up the installed skill, delete everything in it except `.venv` and your
+own folders, copy in the new `skills/beat-sync-edit`, then install any changed
+requirements. A repository `git pull` alone does not update a separately
+copied skill.
+
+```sh
+skillRoot='/path/to/installed/beat-sync-edit'
+newSkill='/path/to/beat-synced-edit/skills/beat-sync-edit'
+rm -rf "$skillRoot/SKILL.md" "$skillRoot/UPSTREAM.json" "$skillRoot/scripts" "$skillRoot/references"
+cp -R "$newSkill/." "$skillRoot/"
+"$skillRoot/.venv/bin/python" -m pip install -r "$skillRoot/requirements.txt"
+```
+
+```powershell
+$skillRoot = 'C:/path/to/installed/beat-sync-edit'
+$newSkill = 'C:/path/to/beat-synced-edit/skills/beat-sync-edit'
+'SKILL.md','UPSTREAM.json','scripts','references' | ForEach-Object { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $skillRoot $_) }
+Copy-Item -Recurse -Force (Join-Path $newSkill '*') $skillRoot
+& (Join-Path $skillRoot '.venv/Scripts/python.exe') -m pip install -r (Join-Path $skillRoot 'requirements.txt')
+```
 
 ## Use it
 

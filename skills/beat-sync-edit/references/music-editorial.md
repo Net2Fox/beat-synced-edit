@@ -38,16 +38,20 @@ reason in `music_structure.pacing`. An older map with beats but no
 
 ## Correcting the map
 
-Listen to the chosen range, then write `<work>/music-overrides.json`:
+You cannot hear the track. Correct the map only from what the user tells you
+(where the drop, accents or phrases fall) or from measured evidence (`beats`,
+`music_structure` onsets, events and energy phases), then write
+`<work>/music-overrides.json`:
 
 ```json
-{"reason": "Listened to the supplied track; the strong accents occur here",
+{"reason": "User: the drop is at 2 s and the accents fall every half second",
  "beats": [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5], "pacing_mode": "beat_cut",
  "events": [{"id": "impact", "type": "energy_rise", "time": 2, "confidence": 0.9}],
  "phrases": [{"id": "opening", "start": 0, "end": 2}, {"id": "reveal", "start": 2, "end": 4}]}
 ```
 
-`reason` (required) states what you heard; the other four keys are optional and
+`reason` (required) names the source of the correction (the user's words or the
+measured evidence), never a listening claim; the other four keys are optional and
 no others are allowed. Times are source-music seconds within the track; beats
 strictly increase; each event needs `time` and `type`; phrases must not overlap;
 `id` is optional but unique; `confidence` defaults to 0.5. A supplied list

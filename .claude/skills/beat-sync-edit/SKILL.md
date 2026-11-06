@@ -50,9 +50,10 @@ finished files go (for example `outputs/`) unless the user picks another place.
 |---|---|
 | `<work>/library/` | `analyze` output: `library.json`, contact sheets, imported ZIP contents |
 | `<work>/annotations.json` | your visual observations about clips |
-| `<work>/beats.json` | `music` output: beats, energy, sections |
+| `<work>/beats.json` | `music` output: tempo, beats, energy, beat confidence, phrase and event hypotheses |
 | `<work>/project.json` | the editing project, with `.history/` snapshots and a `cache/` of rendered shots |
-| `<work>/preview.mp4`, `.html` | fast review render and offline review page |
+| `<work>/preview.mp4`, `.html` | fast review render and offline review page, with the same QA files as the final |
+| `<work>/numba-cache/` | music-analysis cache; safe to delete |
 | `<outputs>/final.mp4` | delivery, written with `final.qa.json`, `final.review-NN.png`, `final.verification.json` and `final.audio.json` beside it |
 
 ## Choose the workflow
@@ -75,7 +76,9 @@ thoughts; never substitute one for the other.
 1. Index the media (files, folders or ZIPs):
    `edit_project.py analyze <footage...> --work <work>/library`
 2. Open every contact sheet the command lists, plus extra frames where one
-   thumbnail is not enough. Write `<work>/annotations.json` with tags, shot
+   thumbnail is not enough. Draw a clip's subject box on its `subject_thumb`
+   (the scene's first frame, listed in `library.json`), because tracking
+   starts there. Write `<work>/annotations.json` with tags, shot
    types, action times and subject boxes for the clips you actually saw (format
    in [project-workflow.md](references/project-workflow.md)), then apply it:
    `edit_project.py annotate <work>/library/library.json --annotations <work>/annotations.json`
@@ -84,11 +87,13 @@ thoughts; never substitute one for the other.
 4. Plan the exact duration:
    `edit_project.py plan --library <work>/library/library.json --beats <work>/beats.json --duration <seconds> --preset cinematic --grade none --size 1080x1920 --fps 30 -o <work>/project.json`.
    Presets are `cinematic` (default), `car`, `gaming` and `product`. Every
-   preset also colour-grades every shot and adds flash/zoom accents, so keep
-   `--grade none` unless the user asked for a look. Map pacing and look requests
+   preset also colour-grades every shot and adds zoom and flash accents.
+   `--grade none` removes only the colour grade; keep it unless the user asked
+   for a look, and remove flashes with an `effects` revision if asked. Map pacing and look requests
    to flags with the table in [project-workflow.md](references/project-workflow.md).
 5. Preview: `edit_project.py preview <work>/project.json -o <work>/preview.mp4`.
-   Look at framing, subject visibility and cut placement against the beats.
+   Look at framing, subject visibility, cut placement against the beats and
+   very short shots (`duration_frames` in `edits[]`).
    If the user already asked for the final file, keep going; the preview needs
    no separate approval.
 6. Fix what is wrong with targeted revisions (next section), preview again.
@@ -125,8 +130,10 @@ Details: [speech-workflow.md](references/speech-workflow.md).
   The operations (`replace`, `reorder`, `duration`, `effects`, `reframe`,
   `speed`, text operations) are listed in
   [project-workflow.md](references/project-workflow.md).
-- Music project: replacement clip IDs come from the shot's
-  `selection.alternatives`. New footage needs `analyze` and a new `plan`.
+- Music project: `replace` accepts any clip ID from the project's `clips`;
+  the shot's `selection.alternatives` lists the best fits (prefer
+  `fits_slot: true`). New footage needs `analyze` with the full input list,
+  `annotate` and a new `plan`.
 - Speech project: change the picture with `speech-broll`. `replace` swaps the
   picture and the speech together.
 - Change only what was asked. Keep shot IDs and do not regenerate the whole plan
@@ -136,10 +143,13 @@ Details: [speech-workflow.md](references/speech-workflow.md).
 ## Review and deliver
 
 - `preview` and `render` run export QA themselves and fail when a technical
-  check fails. On success, open every PNG in `qa.contact_sheets` (cuts and
-  caption/graphic midpoints), read `qa.review_notes`, and check black and
-  silent intervals in `<outputs>/final.qa.json`. Mark intentional ones with
-  the `qa_policy` revision ([review-and-automation.md](references/review-and-automation.md)).
+  check fails. Their printed result is long, so review from the report written
+  beside the video, `<outputs>/final.qa.json` (`<work>/preview.qa.json` for a
+  preview): open every PNG in its `contact_sheets` (cuts and caption/graphic
+  midpoints), read `review_notes`, and check `black_intervals` and
+  `silent_intervals`. Mark intended ones with the `qa_policy` revision
+  ([review-and-automation.md](references/review-and-automation.md)), then
+  `render` again (cached shots are reused) so the report reflects it.
 - You cannot hear the result. Your audio evidence is the loudness and true-peak
   measurements, silent intervals, the beat map and the transcript; say that
   nobody listened unless the user did.
@@ -153,8 +163,12 @@ Details: [speech-workflow.md](references/speech-workflow.md).
    at least 1x in every shot, ramp, anchor and revision. "Cinematic", "smooth",
    "on the beat", a preset, high-FPS footage or a shortage of footage is not
    permission. Slow motion is allowed only when the user's own words ask for
-   it: put their exact words in `--slow-motion-prompt` and use
-   `--interpolation optical_flow`. Never invent the quote or enable it yourself;
+   it, and only for what they asked: plan at 1x, then `revise` with a
+   `slow_motion_policy` operation holding their exact words and
+   `optical_flow`, and slow only the requested shot
+   ([project-workflow.md](references/project-workflow.md#requested-slow-motion));
+   every other shot stays at 1x or faster. Never invent the quote or enable it
+   yourself;
    an old project setting is not a request. Timestamp stretching, a lower
    playback FPS, duplicated frames and frame blending are never substitutes,
    in the CLI or in hand-written FFmpeg. If interpolation fails, stop and

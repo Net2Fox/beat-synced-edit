@@ -183,8 +183,9 @@ edit_project.py preview <work>/project.json -o <work>/preview-v2.mp4
 ```
 
 `revise` validates the whole list and writes nothing on error. On success it
-saves the previous project in `<work>/.history/` (copy one back to undo) and
-increments `revision`; `-o` writes a new file instead. Operations apply in
+saves the previous project in `<work>/.history/` and increments `revision`; to
+undo, copy back the snapshot whose `revision` field you want (file names are
+content hashes). `-o` writes a new file instead of overwriting the project. Operations apply in
 order, and unchanged shots are reused from the render cache.
 
 **Addressing.** `shot` is a 1-based position in the current order or a shot ID
@@ -337,18 +338,20 @@ remains ([music-editorial.md](music-editorial.md)).
 ## Requested slow motion
 
 Use this only as the playback-speed rule in [SKILL.md](../SKILL.md#hard-rules)
-allows. If the user actually said "Slow the impact down to half speed with
-frame interpolation", either plan with it:
-
-```sh
-edit_project.py plan --library <work>/library/library.json --beats <work>/beats.json --duration 25 --slow-motion-prompt "Slow the impact down to half speed with frame interpolation" --interpolation optical_flow --min-speed 0.5 -o <work>/project.json
-```
-
-or enable it in a saved project:
+allows. Plan at 1x as usual. If the user actually said "Slow the impact down to
+half speed with frame interpolation", enable it in the saved project and slow
+only that shot in the same operation list (give it a source span half its
+output length):
 
 ```json
-[{"op": "slow_motion_policy", "prompt": "Slow the impact down to half speed with frame interpolation", "interpolation": "optical_flow", "min_speed": 0.5}]
+[{"op": "slow_motion_policy", "prompt": "Slow the impact down to half speed with frame interpolation", "interpolation": "optical_flow", "min_speed": 0.5},
+ {"op": "replace", "shot": "shot-009", "clip_id": "<that shot's clip_id>", "source_start": 3.5, "source_end": 3.75}]
 ```
+
+`plan --slow-motion-prompt ... --interpolation optical_flow` also exists, but
+then the planner's shortage handling and ramps may slow every shot (for
+example 0.88x across the whole edit). Do not use it for a single requested
+moment.
 
 - The project records `policies.allow_slow_motion`, the exact quote in
   `policies.slow_motion_prompt`, `policies.interpolation: "optical_flow"` and
@@ -360,9 +363,7 @@ or enable it in a saved project:
   requested moment: give that shot a source span shorter than its output length
   (`replace` with the same `clip_id` and `source_start`/`source_end`, then
   `speed` and `anchor` if needed) and check its `average_speed`.
-- While the policy is on, the planner's ramps and shortage handling and a
-  `replace` without a range can also go below 1x in shots nobody asked to slow.
-  Plan at 1x first, enable the policy by revision for the requested shot, and
+- While the policy is on, a `replace` without a range can also go below 1x:
   give other replacements an explicit `source_start`/`source_end`.
 - The renderer interpolates every shot whose slowest speed is below 1x with
   optical flow; an interpolation error fails the render. Interpolation needs a

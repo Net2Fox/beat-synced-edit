@@ -75,9 +75,9 @@ transcript.
 | Flag | Default | Effect |
 |---|---|---|
 | `--select ID...` | every candidate | Phrases to use, in playback order; IDs must be known and unique. |
-| `--pause-limit S` | 0.5 | After a phrase whose next selected phrase comes later in the source, keep at most S seconds of the source that follows it. |
+| `--pause-limit S` | 0.5 | After a phrase whose next selected phrase comes later in the source, keep at most S seconds of the source that follows it, stopping before any phrase you left out. |
 | `--keep-pauses` | off | Keep the whole source span up to that next phrase, including any unselected speech in it; use it only for phrases that are consecutive in the source. Phrases played out of source order get no pause either way. |
-| `--padding S` | 0.1 | Source context before and after each phrase. Where neighbouring phrases would overlap in the source they meet halfway, so no footage repeats. |
+| `--padding S` | 0.1 | Source context before and after each phrase, never reaching into a phrase you left out (unless `--keep-pauses`). Where neighbouring phrases would overlap in the source they meet halfway, so no footage repeats. |
 | `--width`, `--height`, `--fps` | 1080, 1920, 30 | Output size and frame rate (not `--size`). |
 
 Without `--select` it plans the whole recording with long pauses shortened to

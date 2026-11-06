@@ -224,24 +224,27 @@ The slow-motion restriction applies to these tools too. See
 
 ## Example requests
 
-> Use $beat-sync-edit. Make a 25-second car edit from this folder and music file,
+In Codex start a request with `$beat-sync-edit`; Claude Code picks the skill up
+from the request (or type `/beat-sync-edit`).
+
+> Make a 25-second car edit from this folder and music file,
 > 1080×1920 at 30 fps. Keep natural color, alternate wide and detail shots, speed
 > up the cuts at the drop and remove flashes. Add “Night drive” for the first
 > two seconds. Export MP4.
 
-> Use $beat-sync-edit. Combine these product photos and clips into a 15-second
+> Combine these product photos and clips into a 15-second
 > square reel. Keep the product fully visible, add its name and price, and end
 > with “Available now.”
 
-> Use $beat-sync-edit. Add subtitles from this SRT, move them 0.2 seconds later,
+> Add subtitles from this SRT, move them 0.2 seconds later,
 > use a dark translucent box and keep them above the bottom controls. Preserve
 > the montage. Export MP4 and a corrected VTT.
 
-> Use $beat-sync-edit. Transcribe the speech in the final soundtrack locally,
+> Transcribe the speech in the final soundtrack locally,
 > use short phrases with yellow word highlighting, and keep the transcript for
 > correction. Export the captioned MP4 and SRT.
 
-> Use $beat-sync-edit. Slow only the impact down to half speed with optical-flow
+> Slow only the impact down to half speed with optical-flow
 > interpolation. Keep the rest at normal speed or faster and inspect the edges
 > around the moving subject.
 

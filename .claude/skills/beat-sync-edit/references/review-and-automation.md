@@ -33,11 +33,14 @@ unexplained ones add one `review_notes` line per kind, as do a true peak at or a
 
 ## Review an export
 
-1. Open every PNG in `qa.contact_sheets`. Tiles, labelled in output seconds, show the
+Read these from `<name>.qa.json` beside the video (`qa.report`); the printed result is
+long and puts `qa` last.
+
+1. Open every PNG in `contact_sheets`. Tiles, labelled in output seconds, show the
    first, middle and last frame, the frames before, at and after every cut, and the
    middle frame of every title, caption and graphic; a yellow outline marks the style's
    `safe_area`. Extract a full-size frame with `ffmpeg` where a thumbnail is not enough.
-2. Read `qa.review_notes` and, in `qa.report`, the intervals and `audio_measurements`;
+2. Read `review_notes`, the intervals and `audio_measurements`;
    mark intended intervals (a fade from black, a silent intro) with `qa_policy` (below).
    The agent cannot hear: these, `final.audio.json`, the beat map and the transcript
    are its audio evidence; report playback as not reviewed unless the user played it.
@@ -45,7 +48,8 @@ unexplained ones add one `review_notes` line per kind, as do a true peak at or a
    are source seconds ([project-workflow.md](project-workflow.md)).
 
 `qa_policy` is a `revise` operation ([project-workflow.md](project-workflow.md)) that
-the next `preview`, `render` or `verify --project` applies. Ranges are `[start, end]`
+the next `preview`, `render` or `verify --project` applies; an existing `.qa.json`
+does not change until you run one of them again. Ranges are `[start, end]`
 output seconds within the duration; a detected interval inside one (±0.06 s) is
 `intentional`. The operation replaces the whole policy, so repeat ranges you keep.
 
