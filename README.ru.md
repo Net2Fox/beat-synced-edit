@@ -301,7 +301,7 @@ python -X utf8 edit_project.py render work/project.json -o outputs/captioned.mp4
 - [Микширование звука и перестановка музыки](skills/beat-sync-edit/references/audio-workflow.md)
 - [Музыкальная структура, обратная связь и оценка монтажа](skills/beat-sync-edit/references/music-editorial.md)
 - [Графика, проверка трекинга, экспорта и пакетная работа](skills/beat-sync-edit/references/workflow-extensions.md)
-- [Специализированные сценарии оригинального проекта](skills/beat-sync-edit/references/legacy-workflow.md)
+- [Инструменты финальной обработки: монтаж со вспышками, over-under, свои эффекты FFmpeg](skills/beat-sync-edit/references/finishing-tools.md)
 
 Основные исходники — Python-файлы в корне репозитория. После их изменения
 пересоберите обе устанавливаемые копии скилла. Проверка упаковки обнаруживает
@@ -313,7 +313,7 @@ python -X utf8 edit_project.py render work/project.json -o outputs/captioned.mp4
 python tools/build_codex_skill.py
 python tools/build_codex_skill.py --check
 python -X utf8 -m unittest discover -s tests -p "test_*.py"
-python -X utf8 tests/smoke_test.py
+python -X utf8 tests/finishing_tools_smoke_test.py
 python -X utf8 tests/project_smoke_test.py
 python -X utf8 tests/text_smoke_test.py
 python -X utf8 tests/music_editorial_smoke.py
@@ -321,8 +321,8 @@ python -X utf8 tests/music_editorial_smoke.py
 
 Сквозные проверки создают синтетические материалы в игнорируемых Git папках
 `work/`. Личные исходники и скачивание речевых моделей для них не нужны.
-Проверка оригинального CLI принимает `--skill-dir`, а проверки проекта
-и текста — `--scripts-dir`, чтобы тестировать установленную копию. Это локальные
+Каждая сквозная проверка принимает `--scripts-dir`, чтобы тестировать
+установленную копию. Это локальные
 проверки, а не заявление о покрытии всех платформ в CI. Синтетические примеры
 не доказывают качество распознавания реальной речи, удержание личности в кадре
 или художественное качество монтажа. Без соответствующих исходников и
@@ -334,9 +334,10 @@ python -X utf8 tests/music_editorial_smoke.py
 Оригинальный README сохранён **без изменений** в [README.upstream.md](README.upstream.md)
 из коммита
 [`48c09c9`](https://github.com/ZiadAbdelkarim/beat-synced-edit/blob/48c09c92ee69c2d89b7e44b146bbd7b9c26fff08/README.md).
-Его демонстрации относятся к оригинальному проекту. Унаследованные CLI-инструменты
-доступны отдельно; оба актуальных пакета для агентов используют редактор
-проектов этого форка. Сведения о происхождении
+Его демонстрации относятся к оригинальному проекту. Прежний конвейер JSON EDL
+(`clip_tag.py`, `plan_edit.py`, `render_edit.py`, `vertical_style.py`) из форка
+удалён; `flash_montage.py` и `overunder_stack.py` остались инструментами
+финальной обработки, а `beat_map.py` стал библиотекой анализа музыки. Сведения о происхождении
 файлов находятся в [UPSTREAM.json](UPSTREAM.json).
 
 Проект распространяется по [лицензии MIT](LICENSE) с сохранением указания

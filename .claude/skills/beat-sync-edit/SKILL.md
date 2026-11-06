@@ -119,11 +119,10 @@ For a saved version-2 project, inspect it and use `revise`, `preview`, `render`;
 preserve stable shot IDs and the recoverable history. Avoid regenerating the
 entire plan for a local change such as replacing one shot or removing flashes.
 
-For the original JSON EDL pipeline, square white-flash photo montages, custom
-FFmpeg effects, or legacy command flags, read
-[legacy-workflow.md](references/legacy-workflow.md). The original CLIs remain
-available. Use the project workflow when exact duration and reusable revisions
-are required.
+For a square white-flash photo montage, an over-under stacked variant or a
+custom FFmpeg look applied to a finished render, read
+[finishing-tools.md](references/finishing-tools.md). Build every edit itself
+with the project workflow.
 
 For a reference video, match only the requested aspects (rhythm, color, framing,
 effects). If the user's intended aspects are unclear, ask before applying a

@@ -150,7 +150,7 @@ def main():
             "-map", "[vout]", "-map", f"{audio_idx}:a",
             "-t", f"{total:.3f}",
             "-c:v", "libx264", "-preset", "slow", "-crf", "18", "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-b:a", "256k", "-shortest", args.out]
+            "-c:a", "aac", "-b:a", "256k", "-ar", "48000", "-shortest", args.out]
 
     print(f"{len(items)} items, flash {flash}s -> total video {total:.2f}s (audio trimmed to match)")
     r = subprocess.run(cmd, capture_output=True, text=True)

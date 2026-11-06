@@ -4,8 +4,8 @@
 
 This is the capability reference for **Net2Fox's fork** of `beat-synced-edit`.
 The main workflow is a persistent editing project controlled through Codex, Claude Code or
-`edit_project.py`. Separate legacy tools are described below; their effects are
-not all switches in the project renderer.
+`edit_project.py`. A few standalone finishing tools for special formats are
+described below.
 
 ## What you can make
 
@@ -211,20 +211,16 @@ for installation of optional recognition, commands, style flags and examples.
   followed by representative-frame and musical review; it does not certify
   aesthetic quality or platform acceptance.
 
-## Specialized tools retained from the earlier workflow
+## Finishing tools
 
-| Tool / workflow | Available use and boundary |
+| Tool | Use and boundary |
 |---|---|
-| `beat_map.py` | Standalone music analysis and optional HTML energy/beat charts. The chart page uses a public Chart.js CDN; JSON analysis does not need it. |
-| `clip_tag.py` | Standalone scene detection, energy tagging and thumbnails for the original JSON EDL workflow. |
-| `plan_edit.py` | Original EDL planning: alternate highlight excerpts, whole-song planning, beat stride, exclusions, lead shots and pins. It can finish early when unique scenes run out; use projects for exact-duration work. |
-| `render_edit.py` / `overunder_stack.py` | Render the original EDL, or apply over-under stacking to an existing video with the standalone tool. Duplicates the same view above/below; accepts a custom size (default 960×1080) and keeps audio if present. It is not stereoscopic depth generation. |
-| `vertical_style.py` | Cover/contain/square framing, explicitly requested squeeze styling and extra pink/blue strength variants, warm, teal-orange and black-and-white grades. Bare defaults apply squeeze and pink; specify the requested look. |
 | `flash_montage.py` | Authored square photo/video sequence with real overlapping white-flash transitions, subject punch-ins, width stretch, sway or gentle zoom. Final duration accounts for transition overlaps. |
-| Custom FFmpeg cookbook | Per-segment black dips, stretch hits, hue changes, RGB split, shake, strobe/inversion, glow and grades. These require deliberate filter work and separate verification. |
+| `overunder_stack.py` | Stacks the same view above and below on a finished video; custom size (default 960×1080), audio kept. It is not stereoscopic depth generation. |
+| Custom FFmpeg looks | Time-limited black dips, hue changes, RGB split, strobe/inversion, glow, black-and-white or teal-orange applied to a finished render. These require deliberate filter work and separate verification. |
 
-The slow-motion restriction applies to every workflow, including custom filters.
-See [legacy workflow](../skills/beat-sync-edit/references/legacy-workflow.md).
+The slow-motion restriction applies to these tools too. See
+[finishing tools](../skills/beat-sync-edit/references/finishing-tools.md).
 
 ## Example requests
 

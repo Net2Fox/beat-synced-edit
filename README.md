@@ -286,7 +286,7 @@ for style settings, offsets, model caches and word timestamps.
 - [Audio mixing and music arrangement](skills/beat-sync-edit/references/audio-workflow.md)
 - [Musical confidence, selection feedback and evaluation](skills/beat-sync-edit/references/music-editorial.md)
 - [Graphics, tracking review, QA and batch tools](skills/beat-sync-edit/references/workflow-extensions.md)
-- [Specialized legacy workflows](skills/beat-sync-edit/references/legacy-workflow.md)
+- [Finishing tools: flash montage, over-under, custom FFmpeg looks](skills/beat-sync-edit/references/finishing-tools.md)
 
 Root Python files are the source of truth. After changing them, rebuild the
 both installable skill copies. The bundle checker verifies every runtime module
@@ -297,16 +297,15 @@ Run checks with the dependency environment and FFmpeg:
 python tools/build_codex_skill.py
 python tools/build_codex_skill.py --check
 python -X utf8 -m unittest discover -s tests -p "test_*.py"
-python -X utf8 tests/smoke_test.py
+python -X utf8 tests/finishing_tools_smoke_test.py
 python -X utf8 tests/project_smoke_test.py
 python -X utf8 tests/text_smoke_test.py
 python -X utf8 tests/music_editorial_smoke.py
 ```
 
 Smoke tests create synthetic media in ignored `work/` folders. They do not need
-personal footage or download speech models. The legacy smoke accepts
-`--skill-dir`; project/text smokes accept `--scripts-dir` to verify an installed
-copy. These are local checks, not a claim of CI coverage on every platform.
+personal footage or download speech models. Each smoke test accepts
+`--scripts-dir` to verify an installed copy. These are local checks, not a claim of CI coverage on every platform.
 Synthetic fixtures do not establish real-world ASR accuracy, subject identity,
 musical taste or editorial quality. Real-media manifests remain `not_reviewed`
 or `missing_materials` until the relevant sources and actual review are supplied.
@@ -317,8 +316,10 @@ This fork builds on [ZiadAbdelkarim/beat-synced-edit](https://github.com/ZiadAbd
 The original README is preserved **unchanged** in [README.upstream.md](README.upstream.md),
 from upstream commit
 [`48c09c9`](https://github.com/ZiadAbdelkarim/beat-synced-edit/blob/48c09c92ee69c2d89b7e44b146bbd7b9c26fff08/README.md).
-Its demonstrations describe the original project. The inherited CLI tools remain
-available; both current agent packages use this fork's project editor.
+Its demonstrations describe the original project. This fork removed the original
+JSON EDL pipeline (`clip_tag.py`, `plan_edit.py`, `render_edit.py`,
+`vertical_style.py`); `flash_montage.py` and `overunder_stack.py` remain as
+finishing tools, and `beat_map.py` is now the music-analysis library.
 See [UPSTREAM.json](UPSTREAM.json) for provenance.
 
 Released under the [MIT license](LICENSE), with the original attribution retained.
