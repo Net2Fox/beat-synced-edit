@@ -2,7 +2,8 @@
 
 Read this when a request needs something the project renderer does not do: a
 square white-flash montage, an over-under stack, an FFmpeg look the project has
-no effect for, or matching a reference video. Build every other edit with
+no effect for (its effects are in [effects-and-looks.md](effects-and-looks.md)),
+or matching a reference video. Build every other edit with
 `edit_project.py`: it keeps exact duration, revisions and export QA. Nothing
 in these tools enforces the playback-speed rule in SKILL.md; follow it here
 too.
@@ -82,18 +83,22 @@ copied. Without `-o` the output is `<input>_overunder.mp4`.
 
 ## Custom FFmpeg looks on a finished MP4
 
-First use what the project already does: flash, zoom/punch-in, shake and the
-grades `none`, `neutral`, `cinematic`, `cool`, `vivid`, `warm` (plan presets,
-`--grade` and the `effects` revision), faster playback (the `speed` revision)
-and square or vertical output (`plan --size`). See
-[project-workflow.md](project-workflow.md).
+First use what the project already does, because it is cached, revisable and
+survives a re-render: grades, accents on a cut (flash, dip, invert, RGB split,
+glitch, stretch, blur), whips, zoom, shake, beat pulse, vignette, grain, glow
+and letterbox ([effects-and-looks.md](effects-and-looks.md)), faster playback
+(the `speed` revision) and square or vertical output (`plan --size`, see
+[project-workflow.md](project-workflow.md)).
 
-For anything else, apply one filter to the rendered file and limit it to a
-time range with `enable='between(t,A,B)'`, taking `A`/`B` from the output
-timeline: a cut is at `timeline_start_frame / output.fps` of its shot in the
-`edits` of `<work>/project.json`; a beat is at its time in `<work>/beats.json`
-minus `audio.start` in `project.json`. Re-encode the picture only, so
-duration and audio stay unchanged:
+Use FFmpeg only for what the renderer lacks: a hue shift, a strobe over a time
+range, an accent in the middle of a shot (project accents start at a cut), or
+a look on a `flash_montage.py` or `overunder_stack.py` output. Apply one
+filter to the finished file and limit it to a time range with
+`enable='between(t,A,B)'`, taking `A`/`B` from the output timeline: a cut is
+at `timeline_start_frame / output.fps` of its shot in the `edits` of
+`<work>/project.json`; a beat is at its time in `<work>/beats.json` minus
+`audio.start` in `project.json`. Re-encode the picture only, so duration and
+audio stay unchanged:
 
 ```sh
 ffmpeg -i <outputs>/final.mp4 -vf "<filter>" -c:v libx264 -crf 18 -pix_fmt yuv420p -c:a copy <outputs>/final-look.mp4
@@ -101,20 +106,21 @@ ffmpeg -i <outputs>/final.mp4 -vf "<filter>" -c:v libx264 -crf 18 -pix_fmt yuv42
 
 | Request | Filter |
 |---|---|
-| black dip at time T | `fade=t=in:st=T:d=0.07:color=black:enable='between(t,T,T+0.07)'` |
 | hue shift | `hue=h=60:enable='between(t,A,B)'`; animated: `hue=h='mod(t*180,360)'` |
-| RGB split / glitch | `rgbashift=rh=6:bh=-6:enable='between(t,A,B)'` |
-| strobe invert | `negate=enable='between(t,A,B)*lt(mod(t,0.25),0.04)'` |
-| black and white | `hue=s=0` |
-| teal-orange | `colorbalance=rs=-0.15:bs=0.15:rh=0.15:bh=-0.15` |
-| horizontal stretch hit at T | `-filter_complex "split[a][b];[b]scale=iw*1.25:ih,crop=iw/1.25:ih[s];[a][s]overlay=enable='between(t,T,T+0.1)'"` instead of `-vf` |
-| dreamy glow (whole clip) | `-filter_complex "split[a][b];[b]gblur=sigma=8[g];[a][g]blend=all_mode=screen:all_opacity=0.35"` instead of `-vf` |
+| strobe invert from A to B (2 per second) | `negate=enable='between(t,A,B)*lt(mod(t-A,0.5),0.04)'` |
+| black dip at T inside a shot | `fade=t=in:st=T:d=0.07:color=black:enable='between(t,T,T+0.07)'` |
+| RGB split inside a shot | `rgbashift=rh=6:bh=-6:enable='between(t,A,B)'` |
+| horizontal stretch hit at T inside a shot | `-filter_complex "split[a][b];[b]scale=iw*1.25:ih,crop=iw/1.25:ih[s];[a][s]overlay=enable='between(t,T,T+0.1)'"` instead of `-vf` |
+| black and white (montage or stack) | `hue=s=0` |
+| teal-orange (montage or stack) | `colorbalance=rs=-0.15:bs=0.15:rh=0.15:bh=-0.15` |
+| dreamy glow (montage or stack) | `-filter_complex "split[a][b];[b]gblur=sigma=8[g];[a][g]blend=all_mode=screen:all_opacity=0.35"` instead of `-vf` |
 
 Without `enable`, `fade` darkens everything before T. `crop` and `scale`
-reject `enable` (FFmpeg fails), so the stretch row goes through `overlay`;
-use the project `zoom` effect for punch-ins. Never change speed or duration
-here: no `setpts`, `minterpolate`, `fps`, `tmix` or other blending of
-neighbouring frames.
+reject `enable` (FFmpeg fails), so the stretch row goes through `overlay`.
+Never change speed or duration here: no `setpts`, `minterpolate`, `fps`,
+`tmix` or other blending of neighbouring frames. Keep full-frame flashes and
+inverts at three per second or fewer, counting the project's own accents
+([effects-and-looks.md](effects-and-looks.md#craft-and-safety)).
 
 Put accents on energy peaks or drops (`peaks` and `music_structure` in the
 beat map) and use one signature effect and one grade per edit. A later
@@ -128,10 +134,12 @@ The reference-video rule in SKILL.md decides which aspects to match. Extract
 or study a web reference in a browser if browser tools are available, then map
 each named aspect to one adjustment:
 
-- tint: `hue`/`colorbalance`; contrast: `curves`/`eq`; washed-out look:
+- tint: the nearest project grade first (`effects` revision with `grade`),
+  otherwise `hue`/`colorbalance`; contrast: `curves`/`eq`; washed-out look:
   saturation only;
 - the way it cuts: pacing (`plan --beat-stride`, `--section-stride`,
   `--min-shot`), not colour;
-- a specific effect: only that effect.
+- a specific effect: only that effect, from the project catalog when it has
+  one ([effects-and-looks.md](effects-and-looks.md)).
 
 Show a preview frame before the final render.

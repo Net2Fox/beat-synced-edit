@@ -1,6 +1,6 @@
 ---
 name: beat-sync-edit
-description: "Edits local video from supplied footage, photos, music and recordings: beat-synced music montages, speech-first Shorts/Reels/TikToks with B-roll, titles and captions (SRT/VTT, local speech recognition), voice/music/SFX mixing, vertical reframing with subject tracking, speed ramps, local motion graphics and MP4 export. Use when asked to cut, beat-sync, caption, reframe, mix or revise a video, including Russian requests (эдит, монтаж, нарезка, субтитры)."
+description: "Edits local video from supplied footage, photos, music and recordings: beat-synced music montages, speech-first Shorts/Reels/TikToks with B-roll, titles and captions (SRT/VTT, local speech recognition), voice/music/SFX mixing, vertical reframing with subject tracking, speed ramps, transitions, effects and colour grades, local motion graphics and MP4 export. Use when asked to cut, beat-sync, caption, reframe, mix, add effects to or revise a video, including Russian requests (эдит, монтаж, нарезка, субтитры, переходы, эффекты)."
 ---
 
 # Beat-Sync Edit
@@ -23,7 +23,9 @@ ffprobe -version
 ```
 
 On Windows use `python -m venv <skill>/.venv`. FFmpeg and ffprobe must be on
-PATH. Speech recognition is optional: install it only when there is speech to
+PATH. `edit_project.py doctor` checks Python, the packages, FFmpeg encoders
+and the caption font, and says how to fix what is missing; run it after setup
+and whenever a command fails on a missing dependency. Speech recognition is optional: install it only when there is speech to
 transcribe and no transcript was supplied, with
 `<python> -m pip install -r <skill>/requirements-transcription.txt`. Its first
 run downloads the model once into a cache shared by all projects.
@@ -65,6 +67,7 @@ finished files go (for example `outputs/`) unless the user picks another place.
 | Interview, lesson, podcast or talking-head short | complete spoken thoughts | `speech-analyze`, `speech-plan` | [speech-workflow.md](references/speech-workflow.md) |
 | Titles, captions, SRT/VTT files, animated cards, counters, graphic overlays | authored times or anchors | `title`, `subtitles-*`, `graphics`, `motion-project` | [text-and-graphics.md](references/text-and-graphics.md) |
 | Original sound, voice-over, music bed, sound effects, music arranged by bars | the saved timeline | `audio-config`, `arrange-music` | [audio-workflow.md](references/audio-workflow.md) |
+| Transitions, flashes, glitch, shake, beat pulse, grades, grain, vignette, letterbox | cuts and beats of the saved timeline | `revise` (`effects`, `transition`) | [effects-and-looks.md](references/effects-and-looks.md) |
 | Change an existing project | the saved timeline | `inspect`, `revise` | [Revise an existing project](#revise-an-existing-project) |
 | Check an export, record a review, render several projects | — | `verify`, `review-export`, `batch-render` | [review-and-automation.md](references/review-and-automation.md) |
 | Square white-flash montage, over-under stack, custom FFmpeg look, matching a reference video | — | `flash_montage.py`, `overunder_stack.py`, `ffmpeg` | [finishing-tools.md](references/finishing-tools.md) |
@@ -87,11 +90,14 @@ thoughts; never substitute one for the other.
    `edit_project.py music <song> --duration <seconds> -o <work>/beats.json`
 4. Plan the exact duration:
    `edit_project.py plan --library <work>/library/library.json --beats <work>/beats.json --duration <seconds> --preset cinematic --grade none --size 1080x1920 --fps 30 -o <work>/project.json`.
-   Presets are `cinematic` (default), `car`, `gaming` and `product`. Every
-   preset also colour-grades every shot and adds zoom and flash accents.
-   `--grade none` removes only the colour grade; keep it unless the user asked
-   for a look, and remove flashes with an `effects` revision if asked. Map pacing and look requests
-   to flags with the table in [project-workflow.md](references/project-workflow.md).
+   Presets are `cinematic` (default), `car`, `gaming`, `product`, `phonk`,
+   `anime` and `travel`. Every preset colour-grades every shot and adds zoom
+   and accents on accent cuts; `phonk`, `anime` and `travel` also add looks
+   (vignette, grain or glow). `--grade none` removes the colour grade and the
+   looks; keep it unless the user asked for a look, and remove accents with an
+   `effects` revision if asked. Map pacing and look requests to flags with the
+   table in [project-workflow.md](references/project-workflow.md), and effect
+   requests to revisions with [effects-and-looks.md](references/effects-and-looks.md).
 5. Preview: `edit_project.py preview <work>/project.json -o <work>/preview.mp4`.
    Look at framing, subject visibility, cut placement against the beats and
    very short shots (`duration_frames` in `edits[]`).
@@ -128,9 +134,10 @@ Details: [speech-workflow.md](references/speech-workflow.md).
   `edits[]`, `titles[]` and `subtitles[]` of `project.json`.
 - Write the changes as JSON operations and apply them:
   `edit_project.py revise <work>/project.json --operations <work>/revisions.json`.
-  The operations (`replace`, `reorder`, `duration`, `effects`, `reframe`,
-  `speed`, text operations) are listed in
-  [project-workflow.md](references/project-workflow.md).
+  The operations (`replace`, `reorder`, `duration`, `effects`, `transition`,
+  `reframe`, `speed`, text operations) are listed in
+  [project-workflow.md](references/project-workflow.md); effects and
+  transitions in [effects-and-looks.md](references/effects-and-looks.md).
 - Music project: `replace` accepts any clip ID from the project's `clips`;
   the shot's `selection.alternatives` lists the best fits (prefer
   `fits_slot: true`). New footage needs `analyze` with the full input list,
@@ -184,11 +191,15 @@ Details: [speech-workflow.md](references/speech-workflow.md).
    observations only after a real review. Imported translation timing is not
    measured speech alignment. Check that tracking follows the intended subject.
 4. **Natural look.** Keep proportions and natural colour unless the user asks
-   for a look.
+   for a look: plan with `--grade none`, which removes the grade, vignette,
+   grain, glow and letterbox.
 5. **Reference videos.** Match only the aspects the user names (colour,
    contrast, pacing, effects); ask when it is unclear. Method in
    [finishing-tools.md](references/finishing-tools.md).
 6. **No promises.** Do not promise virality or platform performance.
+7. **Flashing.** Never put more than three full-frame flashes or inverts in
+   any one second: rapid bright flashing can trigger photosensitive seizures.
+   For dense cuts use `dip`, `whip` or `rgb` transitions instead.
 
 ## References
 
@@ -204,6 +215,8 @@ Details: [speech-workflow.md](references/speech-workflow.md).
   semantic anchors.
 - [audio-workflow.md](references/audio-workflow.md): source sound, voice,
   music and effects tracks, ducking, loudness, arranging music by bars.
+- [effects-and-looks.md](references/effects-and-looks.md): the effect catalog,
+  grades, transitions, request-to-revision table, flashing safety.
 - [review-and-automation.md](references/review-and-automation.md): export QA,
   `verify`, `review-export`, batch renders, CLI output and exit codes.
 - [finishing-tools.md](references/finishing-tools.md): white-flash montage,

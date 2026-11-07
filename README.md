@@ -23,7 +23,7 @@ new footage. The Python tools can also run directly without an agent.
 | Content-aware selection | Reviewed annotations, explained scores, alternatives, query/preferences and persistent accept/reject feedback. |
 | Framing | Vertical, square or horizontal output; tracking diagnostics, manual camera keyframes, fixed crops and letterboxing. |
 | Graphic compositions | Reusable styles/safe areas and local editable cards, counters and overlays, rendered to a reusable MP4. |
-| Looks and accents | Four editable presets, color grades, punch-ins, flashes, shake and photo motion. |
+| Looks and accents | Seven editable presets (including phonk, anime and travel), eight color grades, cut transitions (flash, dip, whip, glitch, RGB, blur, zoom), punch-ins, shake, beat pulses, grain, vignette, glow, letterbox bars and photo motion. |
 | Speed control | At least 1× playback by default. Explicitly requested slow motion uses optical-flow interpolation. |
 | Text | Animated titles, styled captions, SRT/VTT import/export and optional local speech recognition with word highlighting. |
 | Revisions | Save a project, preview it, replace or reorder shots, revise text and reuse unchanged shot caches. |
@@ -64,8 +64,8 @@ environment (below). Claude Code can do this for you:
 ```text
 Install the skill from https://github.com/Net2Fox/beat-synced-edit
 (folder skills/beat-sync-edit) into ~/.claude/skills/beat-sync-edit.
-Create a .venv inside it, install its requirements.txt, and check that
-ffmpeg and ffprobe are available.
+Create a .venv inside it, install its requirements.txt, and run
+`scripts/edit_project.py doctor` with that interpreter to check the setup.
 ```
 
 This repository also contains a synchronized copy in
@@ -80,7 +80,8 @@ Send this request to Codex:
 $skill-installer Install the skill from
 https://github.com/Net2Fox/beat-synced-edit/tree/main/skills/beat-sync-edit
 Create a .venv inside the installed skill directory, install its requirements.txt,
-and check that ffmpeg and ffprobe are available. Tell me the installed path.
+and run scripts/edit_project.py doctor with that interpreter to check the setup.
+Tell me the installed path.
 ```
 
 To install by hand, copy the folder to `~/.agents/skills/beat-sync-edit` (personal)
@@ -103,7 +104,7 @@ $editPython = Join-Path $skillRoot '.venv/Scripts/python.exe'
 & $editPython -m pip install -r (Join-Path $skillRoot 'requirements.txt')
 ffmpeg -version
 ffprobe -version
-& $editPython -X utf8 (Join-Path $skillRoot 'scripts/edit_project.py') --help
+& $editPython -X utf8 (Join-Path $skillRoot 'scripts/edit_project.py') doctor
 ```
 
 **macOS / Linux**
@@ -115,8 +116,13 @@ editPython="$skillRoot/.venv/bin/python"
 "$editPython" -m pip install -r "$skillRoot/requirements.txt"
 ffmpeg -version
 ffprobe -version
-"$editPython" -X utf8 "$skillRoot/scripts/edit_project.py" --help
+"$editPython" -X utf8 "$skillRoot/scripts/edit_project.py" doctor
 ```
+
+`doctor` prints a JSON readiness report (Python, packages, FFmpeg encoders and
+the caption font) with a fix for each problem, and exits with 0 when every
+required component is ready and 4 otherwise. It works before the requirements
+are installed, so run it first when something fails.
 
 `requirements.txt` resolves current compatible versions.
 `requirements.lock.txt` records the environment tested on Windows with
@@ -263,6 +269,10 @@ edit_project.py render work/project.json -o outputs/edit.mp4
 
 For content-aware selection, inspect the contact sheets and apply annotations
 **before** `plan`; otherwise selection uses the available technical metadata.
+Transitions, accents and looks are `revise` operations on the saved project;
+`edit_project.py effects` prints the catalog and the
+[effects guide](skills/beat-sync-edit/references/effects-and-looks.md) maps
+requests such as "flash between clips" or "film look" to them.
 The [project workflow](skills/beat-sync-edit/references/project-workflow.md)
 includes annotation JSON, musical sections, speed authorization and revisions.
 
@@ -306,8 +316,8 @@ for style settings, offsets, model caches and word timestamps.
 | Problem | What to check |
 |---|---|
 | Skill is missing | Confirm the entire folder is installed in a discovered location; avoid duplicate copies; restart the agent if needed. |
-| Import/dependency error | Use the skill's `.venv` interpreter and install the matching requirements there. |
-| FFmpeg cannot run or encode | Check both executables on PATH and availability of `libx264`/AAC. |
+| Import/dependency error | Run `edit_project.py doctor` with the skill's `.venv` interpreter; it lists what is missing and the command that installs it. |
+| FFmpeg cannot run or encode | Check both executables on PATH and availability of `libx264`/AAC; `doctor` checks all of them. |
 | Not enough footage | Add unused clips/photos, shorten the requested edit or explicitly permit repeats. Slow motion needs its own direct request. |
 | Captions are empty or mistimed | Check the audible soundtrack, its start, caption timebase/offset and selected language. |
 | Text has missing glyphs | Supply an absolute `--font` path to a suitable Unicode TTF/OTF font. |

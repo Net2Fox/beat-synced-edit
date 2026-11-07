@@ -13,6 +13,7 @@ described below.
 |---|---|
 | TikTok, YouTube Shorts and Reels | Beat-synced vertical edits, normally 1080×1920, with selected shots, reframing, music, titles and captions. |
 | Car and action edits | Alternate wide shots, details and action; increase cut density toward a drop; add short zoom punches, white flashes and shake. |
+| Phonk and AMV edits | Dark drift/phonk edits with glitch and RGB hits, shake, beat pulses, grain and vignette; bright anime/AMV edits with flashes, stretch hits, zoom pulses and glow. |
 | Gaming highlights | Build a fast montage from supplied gameplay; prefer reviewed action/highlight labels and align a marked event with a beat. |
 | Travel, nature and portrait films | Use a calmer pace, longer establishing shots, restrained accents and a cinematic or natural-color look. |
 | Product, fashion and detail reels | Arrange overview/detail shots, use gentle motion on photos, add product names and closing calls to action. |
@@ -78,30 +79,51 @@ Presets provide initial preferences and can be overridden by the request. They
 do not authorize slow motion. The stride columns below are beats per planned
 cut in **intro / build / drop / outro**; shot ranges are nominal seconds.
 
-| Preset | Typical subject / shot order | Strides | Shot range | Grade | Drop accents: flash / zoom / shake |
-|---|---|---|---|---|---|
-| `cinematic` | Travel, landscape, portrait; wide → medium → close | 8 / 4 / 2 / 8 | 0.8–6.0 | `cinematic` | 0.08 / 1.04× / 0 |
-| `car` | Cars, wheels, driving; wide → detail → action → close | 4 / 2 / 1 / 4 | 0.2–3.0 | `cool` | 0.65 / 1.15× / 0.25 |
-| `gaming` | Gameplay/action/highlights; wide → action → close → action | 4 / 2 / 1 / 2 | 0.15–2.0 | `vivid` | 0.45 / 1.12× / 0.15 |
-| `product` | Product, fashion, packaging; wide → detail → close → medium | 4 / 4 / 2 / 4 | 0.6–4.0 | `warm` | 0.10 / 1.06× / 0 |
+| Preset | Typical subject / shot order | Strides | Shot range | Grade | Accents on accent shots | Looks on every shot |
+|---|---|---|---|---|---|---|
+| `cinematic` | Travel, landscape, portrait; wide → medium → close | 8 / 4 / 2 / 8 | 0.8–6.0 | `cinematic` | flash 0.08, zoom 1.04× | — |
+| `car` | Cars, wheels, driving; wide → detail → action → close | 4 / 2 / 1 / 4 | 0.2–3.0 | `cool` | flash 0.65, zoom 1.15×, shake 0.25 | — |
+| `gaming` | Gameplay/action/highlights; wide → action → close → action | 4 / 2 / 1 / 2 | 0.15–2.0 | `vivid` | flash 0.45, zoom 1.12×, shake 0.15 | — |
+| `product` | Product, fashion, packaging; wide → detail → close → medium | 4 / 4 / 2 / 4 | 0.6–4.0 | `warm` | flash 0.10, zoom 1.06× | — |
+| `phonk` | Night cars, drift, street, fights; action → close → detail → action | 4 / 2 / 1 / 2 | 0.15–2.0 | `moody` | flash 0.3, RGB split 0.7, glitch 0.5, zoom 1.14×, shake 0.35; beat pulse 0.5 | vignette 0.45, grain 0.25 |
+| `anime` | Anime, characters, faces, fights; close → action → wide → close | 4 / 2 / 1 / 4 | 0.2–2.5 | `vivid` | flash 0.7, RGB split 0.4, stretch 0.35, zoom 1.12×, shake 0.15; beat pulse 0.6 | glow 0.35 |
+| `travel` | Travel, landscape, city, food; wide → medium → detail → wide | 8 / 4 / 2 / 8 | 0.9–6.0 | `vintage` | dip from black 0.5, zoom 1.05× | vignette 0.25, grain 0.12 |
 
-Flash/shake values are strengths from 0 to 1. Outside the drop, the planner
-turns off flash/shake and reduces zoom accents. These shot-order preferences
-depend on reviewed labels and available footage; they are not mandatory
-sequences. Run `edit_project.py presets` to inspect the full current recipes.
+Effect values are strengths from 0 to 1 (zoom is a scale). Accent shots are
+drop shots that start on a beat and are the first of a drop section or every
+fourth shot (every second for `phonk` and `anime`); elsewhere the planner turns
+accents and shake off and reduces the zoom, and beat pulses run only in the
+build and the drop. Looks stay on every shot. `--grade none` removes the grade
+and the looks for a natural result, `--grade NAME` picks another grade and
+`--effect NAME=VALUE` overrides one of the preset's effects (accents still
+land only on accent shots). These shot-order
+preferences depend on reviewed labels and available footage; they are not
+mandatory sequences. Run `edit_project.py presets` to inspect the full current
+recipes and `edit_project.py effects` for the effect catalog.
 
-The project renderer provides:
+The project renderer provides, without overlapping shots or changing the
+output duration:
 
-- Short white accents at cuts without overlapping away the output duration.
-- Quick zoom punches on video; gradual push-ins on still photos.
-- Adjustable camera-shake styling.
-- `none`/`neutral`, `cinematic`, `cool`, `vivid` and `warm` grades.
-- Per-shot, per-section or whole-project effect revisions, including removing
-  all flashes or preserving natural color.
+- Accents at a cut: white flash, dip from black, negative-image hit, RGB split,
+  glitch, horizontal stretch and defocus.
+- Transitions on any cut, a section or the whole edit: `flash`, `dip`,
+  `invert`, `whip` (motion-blurred slide out and in), `glitch`, `rgb`, `blur`
+  and `zoom`. There are no cross-dissolves.
+- Quick zoom punches on video, gradual push-ins on still photos, camera shake
+  and zoom bumps on the measured beats.
+- Looks: vignette, film grain, highlight glow and letterbox bars.
+- Grades: `cinematic`, `cool`, `warm`, `vivid`, `mono`, `teal_orange`,
+  `vintage` and `moody`, plus `neutral` (no grade) and `none` (no grade and no
+  looks).
+- Per-shot, per-section or whole-project effect and transition revisions,
+  including removing every effect or returning to natural colour. The
+  [effects guide](../skills/beat-sync-edit/references/effects-and-looks.md)
+  maps common requests (English and Russian) to these revisions and keeps
+  full-frame flashes to three per second or fewer.
 
-Glitches, RGB splits, black dips, hue cycling and other cookbook effects belong
-to a separate custom FFmpeg workflow. They are not built-in project effects or
-automatic consequences of asking for a preset.
+Hue cycling, strobes over a time range, accents in the middle of a shot and
+looks on the finishing-tool outputs belong to a separate custom FFmpeg
+workflow.
 
 ## Framing, tracking and playback speed
 
@@ -217,7 +239,7 @@ for installation of optional recognition, commands, style flags and examples.
 |---|---|
 | `flash_montage.py` | Authored square photo/video sequence with real overlapping white-flash transitions, subject punch-ins, width stretch, sway or gentle zoom. Final duration accounts for transition overlaps. |
 | `overunder_stack.py` | Stacks the same view above and below on a finished video; custom size (default 960×1080), audio kept. It is not stereoscopic depth generation. |
-| Custom FFmpeg looks | Time-limited black dips, hue changes, RGB split, strobe/inversion, glow, black-and-white or teal-orange applied to a finished render. These require deliberate filter work and separate verification. |
+| Custom FFmpeg looks | Hue shifts, strobes over a time range, accents in the middle of a shot, and grades or glow on `flash_montage.py`/`overunder_stack.py` outputs, applied to a finished file. These require deliberate filter work and separate verification. |
 
 The slow-motion restriction applies to these tools too. See
 [finishing tools](../skills/beat-sync-edit/references/finishing-tools.md).
@@ -292,5 +314,5 @@ speaker identification, a full nonlinear editor,
 or automatic posting to social platforms. It does not export a native Premiere,
 DaVinci Resolve or CapCut project. References can guide a requested aspect such
 as pacing or color after inspection; there is no automatic one-click style clone.
-Some additional effects can be authored with FFmpeg, but they are custom work,
-not guarantees of the built-in planner.
+Effects outside the built-in catalog can be authored with FFmpeg, but they are
+custom work, not guarantees of the built-in planner.

@@ -90,28 +90,37 @@ preset's grade applies. Flags override the preset's values.
 
 ### Presets
 
-| Preset | Character | Grade |
-|---|---|---|
-| `cinematic` (default) | patient establishing shots, gentle build, restrained accents | `cinematic` |
-| `car` | wide/detail alternation, accelerating pace, punchy drop accents | `cool` |
-| `gaming` | action-focused rapid cuts, timed impact accents | `vivid` |
-| `product` | clean overview/detail sequences, gentle motion | `warm` |
+| Preset | Character | Grade | Looks on every shot |
+|---|---|---|---|
+| `cinematic` (default) | patient establishing shots, gentle build, restrained accents | `cinematic` | — |
+| `car` | wide/detail alternation, accelerating pace, punchy drop accents | `cool` | — |
+| `gaming` | action-focused rapid cuts, timed impact accents | `vivid` | — |
+| `product` | clean overview/detail sequences, gentle motion | `warm` | — |
+| `phonk` | dark, aggressive drift/street edit: hard drop cuts, glitch and RGB hits, shake, beat pulses | `moody` | vignette, grain |
+| `anime` | bright AMV: white flashes, stretch hits, zoom pulses on beats | `vivid` | glow |
+| `travel` | calm travel/vlog: long holds, soft dips from black, gentle push-ins | `vintage` | vignette, grain |
 
 A preset sets beats per cut for each section, minimum/maximum shot length,
 target energy, preferred tags, a shot-type cycle, effects and a build/drop
 speed ramp (`edit_project.py presets` prints the values). Preferred tags and
 the shot cycle steer which clips are chosen, so pick by subject first and fall
 back to `cinematic`. Every preset grades every shot, adds a slight zoom to
-every shot and puts its flash/zoom/shake accents on drop cuts (none in phrase
-flow). `--grade none` keeps natural colour (the natural-look rule in
-[SKILL.md](../SKILL.md#hard-rules)); `neutral` is the same.
+every shot and puts its accents on drop cuts (none in phrase flow); where and
+how is in [effects-and-looks.md](effects-and-looks.md). `--grade none` gives
+the natural look of the natural-look rule in [SKILL.md](../SKILL.md#hard-rules):
+no grade and none of the preset's looks; `--grade neutral` drops only the
+grade. `--effect NAME=VALUE` (repeatable) then overrides one of the preset's
+effects, e.g. `--effect flash=0` or `--effect grain=0.15`; accents still land
+only on accent shots.
 
 ### Request to flag
 
 | The user asks for | Use |
 |---|---|
-| natural colour, or names no look | `--grade none` |
-| a colour look | `--grade cinematic`, `cool`, `vivid` or `warm` |
+| natural colour, or names no look | `--grade none` (also removes the preset's looks) |
+| a colour look | `--grade cinematic`, `cool`, `warm`, `vivid`, `mono`, `teal_orange`, `vintage` or `moody` |
+| a style such as phonk, anime/AMV or a travel vlog | `--preset phonk`, `anime` or `travel` (each brings its looks unless `--grade none`) |
+| flashes, glitch, whips, shake, film grain, bars, other effects | revisions `effects` / `transition`: [effects-and-looks.md](effects-and-looks.md) |
 | punchier, more cuts in the drop | `--section-stride drop=1` with a lower `--min-shot`, or the `car`/`gaming` preset |
 | calmer | a larger `--section-stride NAME=N` for the busy sections, a higher `--min-shot`, the `cinematic`/`product` preset, or `--pacing-mode phrase_flow` |
 | the same cut spacing everywhere | `--beat-stride N`; it replaces every section's stride and can make a slow preset faster |
@@ -168,7 +177,8 @@ edit_project.py preview <work>/project.json -o <work>/preview.mp4
 
 This renders a smaller, fast-encoded video and `<work>/preview.html` (`--html`
 sets another path), an offline review page with a player, shot buttons, a
-replacement-clip picker, a duration field, a remove-flashes button and a
+replacement-clip picker, a duration field, buttons that remove all flashes or
+all accent effects (flashes, glitches, whips, pulses, shake) and a
 title/caption editor; show the user either one. The page only queues
 operations and downloads `revisions.json`; apply that file with `revise`.
 Preview runs the same export QA as render
@@ -214,7 +224,8 @@ such as `shot-003`; prefer IDs, because positions change after `reorder`.
 | `replace` | `shot`, `clip_id`; optional `source_start`, `source_end` (source seconds inside the clip) | New picture, same output length. Without a range it takes the first unused range long enough for 1x; with only `source_start` it plays at 1x from there if the clip is long enough. Resets the shot's speed curve, action anchor and reframe (`auto` with the clip's annotated subject). |
 | `reorder` | `order`: every shot ID exactly once | New shot order. |
 | `duration` | `shot`, `seconds`; optional `borrow_from` (a shot) | Sets one shot's length and takes the difference from the next shot (the previous one for the last shot) or from `borrow_from`; the total stays exact. Source ranges stay, so both shots change speed. |
-| `effects` | selector, `values`: `flash` and `shake` 0 to 1, `zoom` 1 to 4, `grade` `none`/`neutral`/`cinematic`/`cool`/`vivid`/`warm` | Merges into each selected shot's effects. |
+| `effects` | selector, `values` (any effect or `grade` from `edit_project.py effects`), optional `reset: true` | Merges into each selected shot's effects; `reset` clears them first; `"grade": "none"` also removes looks: [effects-and-looks.md](effects-and-looks.md). |
+| `transition` | `type`, optional `strength`, and one of `after`, `section`, `all: true` | Sets or clears the transition of those cuts: [effects-and-looks.md](effects-and-looks.md#transitions). |
 | `reframe` | selector, `mode`, `subject`, `subject_start`, `keyframes`, `sample_fps`, `confidence_threshold` | [Tracking and reframing](#tracking-and-reframing) |
 | `speed` | selector, `points`, optional `anchor` | [Speed ramps](#speed-ramps) |
 | `slow_motion_policy` | `prompt`, `interpolation`, `min_speed` | [Requested slow motion](#requested-slow-motion) |
