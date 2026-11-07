@@ -5,7 +5,8 @@ import unittest
 import numpy as np
 
 import _paths  # noqa: F401  (makes the skill's scripts importable)
-from text_overlay import TextCompositor, validate_text_tracks
+from text_overlay import TextCompositor, _luminance, validate_text_tracks
+from graphics_layers import STYLES, apply_style
 
 
 class TextOverlayTests(unittest.TestCase):
@@ -19,6 +20,34 @@ class TextOverlayTests(unittest.TestCase):
     def bounds(frame):
         yy, xx = np.where(frame.max(axis=2) > 0)
         return xx.min(), yy.min(), xx.max(), yy.max()
+
+    def resolved(self, plan, track="subtitles"):
+        compositor = TextCompositor(plan, 108, 192)
+        return next(cue.style for cue in compositor.cues if cue.start == 5)
+
+    def test_project_style_never_overrides_text_style_and_palettes_switch(self):
+        plan = self.plan()
+        plan["subtitle_style"] = {"color": "#FF0000", "font_size": 40}
+        styled = apply_style(plan, "editorial")
+        self.assertEqual(styled["subtitle_style"], {"color": "#FF0000", "font_size": 40})
+        self.assertEqual(self.resolved(styled)["color"], "#FF0000")
+        self.assertEqual(self.resolved(styled)["font_size"], 40)
+        plain = self.plan()
+        self.assertEqual(self.resolved(apply_style(plain, "editorial"))["color"], STYLES["editorial"]["foreground"])
+        switched = apply_style(apply_style(plain, "editorial"), "energetic")
+        self.assertEqual(self.resolved(switched)["color"], STYLES["energetic"]["foreground"])
+        self.assertEqual(self.resolved(switched)["highlight_color"], STYLES["energetic"]["accent"])
+
+    def test_every_style_preset_gives_readable_titles_and_captions(self):
+        def contrast(a, b):
+            high, low = sorted((_luminance(a), _luminance(b)), reverse=True)
+            return (high + .05) / (low + .05)
+        for name in STYLES:
+            for track in ("titles", "subtitles"):
+                with self.subTest(style=name, track=track):
+                    style = self.resolved(apply_style(self.plan(track=track), name), track)
+                    plate = style["background"] or "#000000"  # titles without a plate sit on video; stroke is black
+                    self.assertGreaterEqual(contrast(style["color"], plate), 4.5)
 
     def test_unicode_visible_only_in_end_exclusive_frame_range(self):
         plan = self.plan()

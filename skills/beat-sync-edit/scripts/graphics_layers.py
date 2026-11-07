@@ -61,13 +61,9 @@ def apply_style(plan, name=None, values=None):
         style["name"] = name
     validate_style(style)
     result = copy.deepcopy(plan)
+    # Titles and captions read the palette at render time (text_overlay.palette_text_style),
+    # below their own text-style settings, so nothing is copied into title_style/subtitle_style.
     result["style"] = style
-    for key in ("title_style", "subtitle_style"):
-        result.setdefault(key, {}).update(color=style.get("foreground", "#FFFFFF"), highlight_color=style.get("accent", "#FFD633"),
-                                         safe_area=style.get("safe_area", {}))
-        for field in ("font", "font_size"):
-            if field in style:
-                result[key][field] = style[field]
     return result
 
 

@@ -106,9 +106,10 @@ It recognizes the first that applies (`--offset` shifts the captions):
 edit_project.py text-style <work>/project.json --track subtitles --position bottom --font-size 76 --max-lines 2 --margin 0.12 --background '#10151ECC'
 ```
 
-Precedence per setting: renderer default < track style (`text-style`, `style`,
-and `--preset`/style flags on `subtitles-import` and `subtitles-transcribe`;
-the later call wins) < the cue's `style` (`title` flags, cue `style` in revisions).
+Precedence per setting: renderer default < project `style` palette (below) <
+track style (`text-style`, and `--preset`/style flags on `subtitles-import` and
+`subtitles-transcribe`; the later call wins) < the cue's `style` (`title` flags,
+cue `style` in revisions). So `style` never undoes a `text-style` setting.
 
 | Flag | Values | Default: captions / titles |
 |---|---|---|
@@ -168,14 +169,13 @@ edit_project.py style <work>/project.json --preset editorial --config <work>/sty
 top + bottom below 0.9). Without `--preset` it merges into the current project
 style (`clean` if none).
 
-- Every `style` call, even `--config` alone, also overwrites in both
-  `title_style` and `subtitle_style`: `color` (foreground), `highlight_color`
-  (accent), `safe_area`, `font_size` and `font` (when set), replacing earlier
-  `text-style` values; at 1080×1920 default titles shrink from about 70 to
-  58 px. Background, stroke and per-cue styles stay. Run `style` first, then
-  `text-style`, and repeat `text-style` after any later `style`.
-- `editorial` puts dark `#122132` text on the dark caption box: follow it with
-  `text-style --track subtitles --color '#FFFFFF'` or `--background '#F3EFE5CC'`.
+- Titles and captions take `color` (foreground), `highlight_color` (accent),
+  `safe_area` and `font` from the palette, unless `text-style` or the cue sets
+  them. A dark foreground (`editorial`) also gives them a translucent plate of
+  the palette background, so the text stays readable over video.
+- `font_size` and `animation` apply to graphic layers only; text sizes stay
+  relative to the output (set them with `text-style`).
+- Switching presets updates every value `text-style` did not set.
 
 ## Fonts
 

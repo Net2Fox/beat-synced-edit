@@ -74,7 +74,7 @@ def inspect_project_fonts(plan):
     groups = {}
     for track, style in (("titles", "title_style"), ("subtitles", "subtitle_style")):
         for cue in plan.get(track, []):
-            path = _font_path(cue.get("style", {}).get("font", plan.get(style, {}).get("font")))
+            path = _font_path(cue.get("style", {}).get("font", plan.get(style, {}).get("font", plan.get("style", {}).get("font"))))
             groups.setdefault(path, []).append(cue["text"])
     for graphic in plan.get("graphics", []):
         text = graphic.get("text", "")

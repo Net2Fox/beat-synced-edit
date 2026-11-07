@@ -37,6 +37,39 @@ def _color(value, label):
     return rgba if len(rgba) == 4 else (*rgba, 255)
 
 
+def _luminance(value):
+    """WCAG relative luminance of a #RRGGBB(AA) colour."""
+    def channel(c):
+        c /= 255
+        return c/12.92 if c <= .03928 else ((c+.055)/1.055)**2.4
+    r, g, b, _ = _color(value, "color")
+    return .2126*channel(r) + .7152*channel(g) + .0722*channel(b)
+
+
+def palette_text_style(style):
+    """Title/caption values derived from the project `style` palette.
+
+    Resolution order is defaults < palette < track style (text-style) < cue
+    style, so `style` never overwrites what text-style set. A dark foreground
+    gets a translucent plate of the palette background, because dark text
+    straight on video (or on the default dark caption box) is unreadable.
+    The palette's absolute font_size applies to graphic layers only; text
+    sizes stay relative to the output.
+    """
+    style = style or {}
+    values = {}
+    if "foreground" in style:
+        values["color"] = style["foreground"]
+        if _luminance(style["foreground"]) < .2 and "background" in style:
+            values["background"] = style["background"][:7] + "CC"
+    if "accent" in style:
+        values["highlight_color"] = style["accent"]
+    for key in ("safe_area", "font"):
+        if key in style:
+            values[key] = style[key]
+    return values
+
+
 def _style(value, label):
     if not isinstance(value, dict):
         raise ValueError(f"{label} must be an object")
@@ -285,8 +318,9 @@ class TextCompositor:
                         "position": "bottom" if subtitle else "top", "align": "center",
                         "max_width": .82, "margin": .09, "max_lines": 3 if subtitle else 4,
                         "opacity": 1, "animation": "none", "highlight": False}
+            palette = palette_text_style(plan.get("style"))
             for cue in plan.get(track, []):
-                style = {**defaults, **plan.get(key, {}), **cue.get("style", {})}
+                style = {**defaults, **palette, **plan.get(key, {}), **cue.get("style", {})}
                 self.cues.append(_Cue(cue, style, width, height, scale, fps))
 
     def apply(self, frame_bgr, global_frame_index):
