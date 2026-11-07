@@ -4,6 +4,8 @@ Uses only the standard library at import time, so it reports exactly what is
 missing before the dependencies are installed. Run it with the interpreter the
 skill will use, the skill's .venv: `edit_project.py doctor`. With another
 Python it warns and prints the commands that create and fill that .venv.
+Hints are written for PowerShell on Windows and for POSIX sh elsewhere (Git
+Bash included); `fix_argv` holds the same commands as argument lists.
 """
 from __future__ import annotations
 
@@ -36,21 +38,25 @@ OPTIONAL_MODULES = (("faster_whisper", "faster-whisper", "local speech recogniti
                     ("av", "av", "audio decoding for faster-whisper"))
 FONT_SAMPLE = "Aa Zz Яя Ёё Жж 0123456789 !?"
 MINIMUM_PYTHON = (3, 12)
+MINIMUM_TEXT = ".".join(map(str, MINIMUM_PYTHON))
 SKILL = Path(__file__).resolve().parents[1]
 VENV = SKILL / ".venv"
 VENV_PYTHON = VENV / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
 
-def _command(argv, windows=None):
-    """Format a command for the user's shell: PowerShell on Windows, POSIX sh elsewhere."""
+def _powershell(windows=None):
+    """Windows hints use PowerShell syntax, unless doctor runs in a POSIX shell such as Git Bash."""
     if not (os.name == "nt" if windows is None else windows):
+        return False
+    return not (os.environ.get("MSYSTEM") or os.environ.get("SHELL"))
+
+
+def _command(argv, windows=None):
+    """Format one command for the user's shell (PowerShell, or POSIX sh including Git Bash)."""
+    if not _powershell(windows):
         return shlex.join(str(part) for part in argv)
     quote = lambda part: part if re.fullmatch(r"[\w.-]+", part) else "'" + part.replace("'", "''") + "'"
     return "& " + " ".join(quote(str(part)) for part in argv)  # a quoted program needs the call operator
-
-
-def _in_venv():
-    return sys.prefix != getattr(sys, "base_prefix", sys.prefix)
 
 
 def _in_skill_venv():
@@ -60,24 +66,48 @@ def _in_skill_venv():
         return False
 
 
-def _skill_setup(requirements):
-    """Commands that create the skill's .venv when missing and install into it."""
-    steps = [] if VENV_PYTHON.exists() else [_command([sys.executable, "-m", "venv", VENV])]
-    steps.append(_command([VENV_PYTHON, "-m", "pip", "install", "-r", SKILL / requirements]))
-    return "; ".join(steps)
+def _too_old(version):
+    return tuple(version[:2]) < MINIMUM_PYTHON
 
 
-def _install(requirements):
-    # Inside a virtual environment install there; never into a system Python.
-    if _in_venv():
-        return _command([sys.executable, "-m", "pip", "install", "-r", SKILL / requirements])
-    return _skill_setup(requirements)
+def _venv_version():
+    """(major, minor) of the Python the skill .venv was created with, from pyvenv.cfg."""
+    try:
+        text = (VENV / "pyvenv.cfg").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    match = re.search(r"^\s*version(?:_info)?\s*=\s*(\d+)\.(\d+)", text, re.MULTILINE)
+    return (int(match.group(1)), int(match.group(2))) if match else None
 
 
-def _check(name, status, detail, hint=None, required=True):
+def _setup(requirements):
+    """(hint, argv steps) that install `requirements` into the skill .venv, creating it if needed.
+
+    Always the skill's own .venv, the interpreter SKILL.md runs every command
+    with: never a system Python or another environment. Steps are None when a
+    person has to act first (install a newer Python, delete an old .venv).
+    """
+    install = [str(VENV_PYTHON), "-m", "pip", "install", "-r", str(SKILL / requirements)]
+    if VENV_PYTHON.exists():
+        old = _venv_version()
+        if old and _too_old(old):
+            return (f"the skill environment {VENV} uses Python {old[0]}.{old[1]}: delete it, recreate it with "
+                    f"Python {MINIMUM_TEXT} or newer, then run {_command(install)}"), None
+        return _command(install), [install]
+    if _too_old(sys.version_info):
+        example = "py -3.12" if os.name == "nt" else "python3.12"
+        return (f"install Python {MINIMUM_TEXT} or newer, create the skill environment with it "
+                f"({example} -m venv {VENV}), then run {_command(install)}"), None
+    create = [sys.executable, "-m", "venv", str(VENV)]
+    return "; ".join(_command(step) for step in (create, install)), [create, install]
+
+
+def _check(name, status, detail, hint=None, required=True, fix_argv=None):
     item = {"name": name, "status": status, "required": required, "detail": detail}
     if hint:
         item["hint"] = hint
+    if fix_argv:
+        item["fix_argv"] = fix_argv  # the hint's commands as argument lists, free of shell quoting
     return item
 
 
@@ -87,19 +117,27 @@ def _version(module):
 
 def _python_check():
     detail = f"{platform.python_implementation()} {platform.python_version()} at {sys.executable}"
-    if sys.version_info[:2] < MINIMUM_PYTHON:
-        return _check("python", "fail", detail, f"Use Python {MINIMUM_PYTHON[0]}.{MINIMUM_PYTHON[1]} or newer")
+    if _too_old(sys.version_info):
+        if _in_skill_venv():
+            hint, steps = _setup("requirements.txt")
+        else:
+            hint, steps = f"Use Python {MINIMUM_TEXT} or newer", None
+        return _check("python", "fail", detail, hint, fix_argv=steps)
     return _check("python", "pass", detail)
 
 
 def _venv_check():
-    if _in_skill_venv():
+    old = _venv_version() if VENV_PYTHON.exists() else None
+    if _in_skill_venv() and not (old and _too_old(old)):
         return _check("venv", "pass", f"running in the skill environment {VENV}", required=False)
-    if VENV_PYTHON.exists():
-        hint = f"Run doctor and every skill command with {VENV_PYTHON}"
+    if VENV_PYTHON.exists() and not (old and _too_old(old)):
+        hint, steps = f"Run doctor and every skill command with {VENV_PYTHON}", None
     else:
-        hint = f"Create the skill environment and install its requirements: {_skill_setup('requirements.txt')}"
-    return _check("venv", "warn", f"running with {sys.executable}, not the skill environment {VENV}", hint, required=False)
+        hint, steps = _setup("requirements.txt")
+        hint = f"Set up the skill environment: {hint}"
+    detail = (f"the skill environment {VENV} uses Python {old[0]}.{old[1]}" if old and _too_old(old)
+              else f"running with {sys.executable}, not the skill environment {VENV}")
+    return _check("venv", "warn", detail, hint, required=False, fix_argv=steps)
 
 
 def _module_checks():
@@ -113,23 +151,27 @@ def _module_checks():
                 importlib.import_module(name)
             checks.append(_check(f"package:{package}", "pass", _version(module)))
         except Exception as exc:  # ImportError, OSError from native libraries and broken wheels alike
-            hint = f"Install the base requirements: {_install('requirements.txt')}"
+            hint, steps = _setup("requirements.txt")
+            hint = f"Install the base requirements: {hint}"
             if package == "soundfile":
                 hint += " (if soundfile is installed, the libsndfile system library is missing)"
-            checks.append(_check(f"package:{package}", "fail", f"{type(exc).__name__}: {exc}", hint))
+            checks.append(_check(f"package:{package}", "fail", f"{type(exc).__name__}: {exc}", hint, fix_argv=steps))
     for module_name, package, purpose in OPTIONAL_MODULES:
         try:
             module = importlib.import_module(module_name)
             version = _version(module)
             status, hint = "pass", None
             major = version.split(".")[0]
+            steps = None
             if module_name == "av" and major.isdigit() and int(major) >= 19:
-                status, hint = "warn", f"PyAV 19+ is incompatible with faster-whisper 1.2: {_install('requirements-transcription.txt')}"
-            checks.append(_check(f"optional:{package}", status, f"{version} ({purpose})", hint, required=False))
+                hint, steps = _setup("requirements-transcription.txt")
+                status, hint = "warn", f"PyAV 19+ is incompatible with faster-whisper 1.2: {hint}"
+            checks.append(_check(f"optional:{package}", status, f"{version} ({purpose})", hint, required=False, fix_argv=steps))
         except Exception:
+            hint, steps = _setup("requirements-transcription.txt")
             checks.append(_check(f"optional:{package}", "missing", f"not installed ({purpose})",
-                                 f"Only needed to transcribe speech without a transcript: {_install('requirements-transcription.txt')}",
-                                 required=False))
+                                 f"Only needed to transcribe speech without a transcript: {hint}",
+                                 required=False, fix_argv=steps))
     return checks
 
 

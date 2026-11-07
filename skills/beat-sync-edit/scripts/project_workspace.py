@@ -228,8 +228,15 @@ def _apply_transition(edits, operation):
 
 
 def _repair_transitions(edits):
-    """After any edit, drop transitions whose two shots are no longer adjacent."""
+    """After any edit, drop transitions whose two shots are no longer adjacent.
+
+    A shot that became a still (replace, B-roll) loses a zoom transition's
+    punch: on a photo, zoom is a slow push over the whole shot.
+    """
     for index, shot in enumerate(edits):
+        marker = shot.get("transition_in")
+        if marker and shot.get("kind") == "image" and "zoom_before" in marker:
+            shot.setdefault("effects", {})["zoom"] = marker.pop("zoom_before")
         marker = shot.get("transition_in")
         if marker and (index == 0 or edits[index - 1]["id"] != marker.get("from")):
             _clear_transition_in(shot)
@@ -275,8 +282,10 @@ def apply_revisions(plan, operations):
     validate_plan(result)
     edits = result["edits"]
     fps = result["output"]["fps"]
-    from edit_effects import flash_burst_message, flash_bursts
-    bursts_before = {shots for _, shots in flash_bursts(edits, fps)}
+    from edit_effects import flash_burst_message, flash_burst_shots, flash_bursts, flash_peak
+    # An older project may already flash too often; a revision may keep, shrink
+    # or move those bursts, but not pull another shot into one or make one denser.
+    burst_shots_before, peak_before = flash_burst_shots(edits, fps), flash_peak(edits, fps)
     catalog = {str(c["id"]): c for c in result.get("clips", [])}
     slowest_before = {shot["id"]: _slowest(shot, fps) for shot in edits}
     explicitly_retimed = set()
@@ -410,9 +419,10 @@ def apply_revisions(plan, operations):
         refresh_source_captions(result)
     refresh_anchors(result)
     validate_plan(result)
-    new_bursts = [burst for burst in flash_bursts(result["edits"], fps) if burst[1] not in bursts_before]
-    if new_bursts:
-        raise ValueError("This revision puts " + flash_burst_message(new_bursts, fps))
+    bursts = flash_bursts(result["edits"], fps)
+    grown = [burst for burst in bursts if set(burst[1]) - burst_shots_before]
+    if grown or (bursts and flash_peak(result["edits"], fps) > peak_before):
+        raise ValueError("This revision would leave " + flash_burst_message(grown or bursts, fps))
     result["revision"] = int(plan.get("revision", 0)) + 1
     result.setdefault("revision_log", []).append({
         "revision": result["revision"], "at": datetime.now(timezone.utc).isoformat(),

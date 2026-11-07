@@ -16,7 +16,7 @@ instructions are the same for Claude Code and Codex.
 on Windows. If `<python>` does not exist yet, create it once:
 
 ```sh
-python3 -m venv <skill>/.venv
+python3 -m venv <skill>/.venv     # Python 3.12 or newer
 <python> -m pip install -r <skill>/requirements.txt
 ffmpeg -version
 ffprobe -version
@@ -26,7 +26,9 @@ On Windows use `python -m venv <skill>/.venv`. FFmpeg and ffprobe must be on
 PATH. `edit_project.py doctor` checks Python, the packages, FFmpeg encoders
 and the caption font, and says how to fix what is missing; run it with
 `<python>` after setup and whenever a command fails on a missing dependency.
-Its `problems` must be empty; `warnings` are optional items. Speech recognition is optional: install it only when there is speech to
+Its `problems` must be empty; `warnings` are optional items. Each hint also
+comes as `fix_argv`, the same commands as argument lists, which run without
+any shell quoting. Speech recognition is optional: install it only when there is speech to
 transcribe and no transcript was supplied, with
 `<python> -m pip install -r <skill>/requirements-transcription.txt`. Its first
 run downloads the model once into a cache shared by all projects.

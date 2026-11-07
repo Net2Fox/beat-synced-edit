@@ -88,13 +88,16 @@ Strength guide: subtle 0.2–0.4, clear 0.5–0.7, hard 0.8–1. `pulse` uses th
 project's beat map (music projects only; speech and motion projects have no
 beats).
 
-Render cost: the `cinematic`, `vivid`, `moody`, `vintage` and `teal_orange`
-grades make a render about 2.5–3.5 times slower than no grade, so
-`cinematic` (the default), `gaming`, `phonk`, `anime` and `travel` take that
-much longer than `car`, `product` or any plan with `--grade none`. Among the
-looks, `grain` costs about as much as a grade and makes the exported file many
-times larger; `glow` costs some, `vignette` and `letterbox` little. For a fast
-draft, preview with `--grade none` or `--grade neutral --effect grain=0`.
+Render cost: the graded presets (`cinematic`, the default, `gaming`, `anime`,
+`phonk` and `travel`) render noticeably slower than `car`, `product` or a plan
+with `--grade none`; `phonk` and `travel` are the slowest. Every grade except
+`warm` and `cool` costs time, and among the looks `grain` costs about as much
+as a grade and makes the exported file many times larger; `glow` costs some,
+`vignette` and `letterbox` little. `preview` and `render` take no effect flags:
+for a fast draft of an existing project, revise a copy
+(`revise <work>/project.json --operations <ops> -o <work>/draft.json` with
+`{"op": "effects", "all": true, "values": {"grade": "none"}}`) and preview
+that, so the real project keeps its look and revisions.
 
 Letterbox for a target aspect `A` on a `W×H` frame: `bar = (1 - W/(A·H)) / 2`.
 On 16:9 output 2.39:1 is `0.128` and 2:1 is `0.056`. On 9:16 output thin bars
@@ -166,9 +169,11 @@ playback-speed rule in [SKILL.md](../SKILL.md#hard-rules), never an effect.
   subtle in the build, full on the drop, little or none in intro and outro.
 - Never exceed three full-frame flashes, dips or inverts in any one second:
   rapid flashing can trigger photosensitive seizures. `plan` drops the extra
-  ones, `revise` refuses a revision that adds them, and export QA adds a
-  review note when an older project still has them. On dense cuts use
-  `whip`, `rgb` or `blur`.
+  ones, `revise` refuses a revision that would add one to a burst or make a
+  burst denser (removing flashes from an older project's bursts is always
+  allowed), `flash_montage.py` refuses dense flashing, and export QA adds a
+  review note when an older project still flashes too often. On dense cuts
+  use `whip`, `rgb` or `blur`.
 - After an effect revision, preview and open the QA contact sheets
   ([review-and-automation.md](review-and-automation.md)): they sample frames
   on both sides of every cut, where accents and whips appear. Check that bars,

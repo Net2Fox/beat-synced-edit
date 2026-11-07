@@ -62,7 +62,9 @@ Write `seq.json` yourself, one item per shot, in order:
   `sum(dur[0..i]) - (i+1) * flash`. To land flashes on the music, put these
   times on `beats` from `edit_project.py music <song> -o <work>/beats.json`,
   measured on the file you pass to `--audio`; for a flash every k beats, use
-  `dur = k * 60 / tempo + flash`.
+  `dur = k * 60 / tempo + flash`. Keep `k * 60 / tempo` at 1/3 s or more
+  (k = 2 or more above 180 BPM, and check for a doubled tempo): the script
+  refuses more than three flashes in any second (SKILL.md rule 7).
 
 Iterate by editing `seq.json` and re-running the command.
 

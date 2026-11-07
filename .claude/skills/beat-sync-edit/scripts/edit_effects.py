@@ -124,6 +124,17 @@ def flash_bursts(edits, fps):
             for i in range(len(starts) - limit) if starts[i + limit][0] - starts[i][0] < fps]
 
 
+def flash_peak(edits, fps):
+    """The most flash/dip/invert cuts that start inside any one second."""
+    starts = [frame for frame, _ in _flash_starts(edits)]
+    return max((sum(0 <= other - frame < fps for other in starts) for frame in starts), default=0)
+
+
+def flash_burst_shots(edits, fps):
+    """IDs of every shot that takes part in a burst."""
+    return {shot_id for _, shots in flash_bursts(edits, fps) for shot_id in shots}
+
+
 def thin_flashes(edits, fps):
     """Zero flash/dip/invert on every shot that would be the fourth inside one second."""
     kept, thinned = [], []

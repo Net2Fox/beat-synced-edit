@@ -1,4 +1,5 @@
 """Per-shot edit effects, transitions, presets and the environment entry points."""
+import copy
 import json
 from pathlib import Path
 import shutil
@@ -222,6 +223,16 @@ class RevisionTests(unittest.TestCase):
                 shot = next(e for e in changed["edits"] if e["id"] == "shot-002")
                 self.assertAlmostEqual(shot["effects"]["zoom"], 1.5)
 
+    def test_a_shot_that_becomes_a_still_loses_the_zoom_punch(self):
+        self.plan["assets"].append({"id": "v", "path": str(self.image), "kind": "video"})
+        self.plan["edits"][1].update(kind="video", asset_id="v", source_end=1.0)
+        self.plan["clips"] = [{"id": "still", "asset_id": "a", "source": str(self.image), "kind": "image", "start": 0.0, "end": 0.0}]
+        plan = apply_revisions(self.plan, [{"op": "transition", "after": 1, "type": "zoom"},
+                                           {"op": "replace", "shot": 2, "clip_id": "still"}])
+        shot = plan["edits"][1]
+        self.assertEqual((shot["kind"], shot["effects"].get("zoom", 1.0)), ("image", 1.0))
+        self.assertAlmostEqual(shot["effects"]["blur_in"], .4)
+
     def test_zoom_transition_into_a_still_only_defocuses(self):
         plan = apply_revisions(self.plan, [{"op": "transition", "after": 1, "type": "zoom"}])
         shot = plan["edits"][1]
@@ -297,6 +308,44 @@ class FlashRateTests(unittest.TestCase):
         apply_revisions(self.dense, [{"op": "effects", "all": True, "values": {"grade": "mono"}}])
         fixed = apply_revisions(self.dense, [{"op": "effects", "all": True, "values": {"flash": 0}}])
         self.assertEqual(flash_bursts(fixed["edits"], 30), [])
+
+    def test_an_old_burst_can_be_thinned_one_cut_at_a_time(self):
+        for shot in self.dense["edits"]:
+            shot["effects"]["flash"] = .5
+        for operations in ([{"op": "effects", "shot": 3, "values": {"flash": 0}}],
+                           [{"op": "effects", "shot": 3, "reset": True}],
+                           [{"op": "transition", "after": 2, "type": "rgb"}],
+                           [{"op": "transition", "after": 2, "type": "cut"}],
+                           [{"op": "reorder", "order": ["shot-001", "shot-002", "shot-004", "shot-003",
+                                                        "shot-005", "shot-006", "shot-007", "shot-008"]}]):
+            with self.subTest(operations=operations):
+                apply_revisions(self.dense, operations)
+
+    def test_a_revision_may_not_grow_or_densify_a_burst(self):
+        for shot in self.dense["edits"][:4]:
+            shot["effects"]["flash"] = .5
+        with self.assertRaisesRegex(ValueError, "would leave"):
+            apply_revisions(self.dense, [{"op": "effects", "shot": 5, "values": {"flash": .5}}])
+        # Squeezing shots that already flash too often into less time makes it worse.
+        squeeze = copy.deepcopy(self.loose)
+        for shot in squeeze["edits"]:
+            shot["effects"]["flash"] = .5
+        squeeze["edits"][0]["effects"].pop("flash")
+        operations = [{"op": "duration", "shot": n, "seconds": .2, "borrow_from": 8} for n in range(2, 8)]
+        with self.assertRaisesRegex(ValueError, "photosensitive"):
+            apply_revisions(squeeze, operations)
+
+    def test_flash_montage_refuses_dense_flashing(self):
+        from flash_montage import densest_second, flash_peaks
+        self.assertEqual(densest_second(flash_peaks([60 / 200 + .5] * 8, .5)), 4)  # every beat at 200 BPM
+        self.assertEqual(densest_second(flash_peaks([60 / 180 + .5] * 8, .5)), 3)
+        script = Path(ROOT) / "flash_montage.py"
+        seq = Path(self.temp.name) / "seq.json"
+        seq.write_text(json.dumps({"items": [{"image": str(Path(self.temp.name)/"still.png"), "dur": .8}] * 8}), encoding="utf-8")
+        result = subprocess.run([sys.executable, "-X", "utf8", str(script), "--seq", str(seq), "--audio", "unused.wav",
+                                 "--out", str(Path(self.temp.name)/"m.mp4")], capture_output=True, text=True, encoding="utf-8")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("4 white flashes within one second", result.stderr)
 
     def test_thinning_keeps_three_per_second(self):
         for shot in self.dense["edits"]:

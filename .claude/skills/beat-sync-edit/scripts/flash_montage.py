@@ -83,6 +83,27 @@ def item_filter(idx, S, dur, fps, stretch, zoom, cx, cy, motion, is_video,
     return f
 
 
+MAX_FLASHES_PER_SECOND = 3  # more can trigger photosensitive seizures (SKILL.md rule 7)
+
+
+def flash_peaks(durations, flash, open_flash=True, close_flash=False):
+    """Times of the whitest frame of every flash: the opening fade, each xfade, the close."""
+    peaks = [0.0] if open_flash else []
+    total = float(durations[0])
+    for duration in durations[1:]:
+        offset = total - flash
+        peaks.append(offset + flash / 2)
+        total = offset + float(duration)
+    if close_flash:
+        peaks.append(total)
+    return peaks
+
+
+def densest_second(peaks):
+    """The most flash peaks inside any one-second window."""
+    return max((sum(1 for other in peaks if peak <= other < peak + 1 - 1e-6) for peak in peaks), default=0)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seq", required=True, help="seq.json describing the ordered items")
@@ -104,6 +125,13 @@ def main():
         sys.exit("seq has no items")
     seq_dir = str(seq_path.parent)
     S, fps, flash = args.size, args.fps, args.flash
+    durations = [float(it["dur"]) for it in items]
+    if any(duration <= flash for duration in durations):
+        sys.exit(f"every dur must be longer than --flash ({flash}s)")
+    densest = densest_second(flash_peaks(durations, flash, args.open_flash, args.close_flash))
+    if densest > MAX_FLASHES_PER_SECOND:
+        sys.exit(f"{densest} white flashes within one second: at most {MAX_FLASHES_PER_SECOND} are allowed, "
+                 "because rapid flashing can trigger photosensitive seizures. Lengthen dur or flash every 2+ beats.")
 
     # inputs: looped still or trimmed video clip per item
     cmd = ["ffmpeg", "-y"]
