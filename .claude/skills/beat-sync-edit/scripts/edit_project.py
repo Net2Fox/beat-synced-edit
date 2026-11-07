@@ -33,7 +33,17 @@ def section_stride(value):
     return name, stride
 
 
+def effect_override(value):
+    from edit_effects import parse_effect_override
+    try:
+        return parse_effect_override(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
 def parser():
+    from edit_effects import GRADES
+    from edit_presets import PRESETS
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest="command", required=True)
     analyze = sub.add_parser("analyze", help="Index folders, files and ZIPs; generate scene contact sheets")
@@ -53,7 +63,7 @@ def parser():
     plan.add_argument("--library", required=True)
     plan.add_argument("--beats", required=True)
     plan.add_argument("--duration", type=float, default=25)
-    plan.add_argument("--preset", choices=["cinematic", "car", "gaming", "product"], default="cinematic")
+    plan.add_argument("--preset", choices=tuple(PRESETS), default="cinematic")
     plan.add_argument("--size", type=size, default=(1080, 1920))
     plan.add_argument("--fps", type=int, default=30)
     plan.add_argument("--audio-start", type=float)
@@ -69,7 +79,9 @@ def parser():
     plan.add_argument("--section-stride", type=section_stride, action="append", help="Override one section's cut spacing, e.g. drop=1; repeat as needed")
     plan.add_argument("--min-shot", type=float, help="Minimum planned shot length in seconds")
     plan.add_argument("--max-shot", type=float, help="Maximum planned shot length in seconds")
-    plan.add_argument("--grade", choices=["none", "neutral", "cinematic", "cool", "vivid", "warm"])
+    plan.add_argument("--grade", choices=GRADES)
+    plan.add_argument("--effect", type=effect_override, action="append", metavar="NAME=VALUE",
+                      help="Override one preset effect, e.g. rgb_split=0.6 or grain=0.3; repeat as needed (see the effects command)")
     plan.add_argument("--sections", help="JSON array with explicit musical section ranges")
     plan.add_argument("--pacing-mode", choices=("auto", "beat_cut", "phrase_flow"), default="auto")
     plan.add_argument("--music-overrides", help="Reviewed musical events/phrases JSON")
@@ -92,6 +104,7 @@ def parser():
     inspect = sub.add_parser("inspect", help="Validate a saved project and summarize its timeline")
     inspect.add_argument("project")
     sub.add_parser("presets", help="List the actual pace, effect and color settings")
+    sub.add_parser("effects", help="List per-shot effects, grades and transitions with their value ranges")
     from text_commands import register_text_commands
     register_text_commands(sub)
     from audio_commands import register_audio_commands
@@ -162,6 +175,8 @@ def run(args):
                      if getattr(args, key) is not None}
         if args.section_stride:
             overrides["section_stride"] = dict(args.section_stride)
+        if args.effect:
+            overrides["effects"] = dict(args.effect)
         result = build_plan(beatmap, library, duration=args.duration, preset=args.preset, fps=args.fps,
                             width=width, height=height, audio_start=args.audio_start,
                             allow_repeats=args.allow_repeats, shortage=args.shortage,
@@ -209,6 +224,9 @@ def run(args):
     if args.command == "presets":
         from edit_presets import PRESETS
         return PRESETS
+    if args.command == "effects":
+        from edit_effects import catalog
+        return catalog()
     raise ValueError(f"Unknown command: {args.command}")
 
 

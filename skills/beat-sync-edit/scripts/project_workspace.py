@@ -131,10 +131,90 @@ def _replacement_span(plan, shot, clip):
     raise ValueError("No unused replacement range is long enough; choose another clip or shorten the shot")
 
 
+_TRANSITION_FIELDS = {"op", "type", "strength", "after", "section", "all"}
+
+
+def _clear_transition_in(shot):
+    """Undo the incoming side of a transition, restoring the zoom it replaced."""
+    from edit_effects import transition_effects
+    marker = shot.pop("transition_in", None)
+    effects = shot.setdefault("effects", {})
+    effects.update(transition_effects("cut")[1])
+    if marker and "zoom_before" in marker:
+        effects["zoom"] = marker["zoom_before"]
+
+
+def _clear_transition_out(shot):
+    from edit_effects import transition_effects
+    shot.pop("transition_out", None)
+    shot.setdefault("effects", {}).update(transition_effects("cut")[0])
+
+
+def _set_transition(before, after, kind, strength):
+    from edit_effects import transition_effects
+    outgoing, incoming = transition_effects(kind, strength)
+    _clear_transition_in(after)
+    _clear_transition_out(before)
+    if kind == "cut":
+        return
+    before["effects"].update(outgoing)
+    marker = {"type": kind, "from": before["id"]}
+    if "zoom" in incoming:
+        marker["zoom_before"] = after["effects"].get("zoom", 1.0)  # restored when the transition changes
+    after["effects"].update(incoming)
+    after["transition_in"] = marker
+    before["transition_out"] = {"type": kind, "to": after["id"]}
+
+
+def _apply_transition(edits, operation):
+    """Set the transition of one or more cuts; `type: cut` removes it."""
+    from project_plan import SECTION_NAMES
+    unknown = set(operation) - _TRANSITION_FIELDS
+    if unknown:
+        raise ValueError(f"Unknown transition fields: {sorted(unknown)}")
+    if "type" not in operation:
+        raise ValueError("transition requires type (cut removes a transition)")
+    selectors = [key for key in ("after", "section", "all") if key in operation]
+    if len(selectors) != 1:
+        raise ValueError("transition takes exactly one of after (shot number or id), section, or all: true")
+    if len(edits) < 2:
+        raise ValueError("A transition needs at least two shots")
+    if "after" in operation:
+        shot = _selected(edits, {"shot": operation["after"]})[0]
+        index = edits.index(shot)
+        if index == len(edits) - 1:
+            raise ValueError("transition after the final shot has no following cut")
+        cuts = [index]
+    elif "section" in operation:
+        if operation["section"] not in SECTION_NAMES:
+            raise ValueError(f"transition section must be one of {', '.join(SECTION_NAMES)}")
+        cuts = [index for index in range(len(edits) - 1) if edits[index + 1].get("section") == operation["section"]]
+        if not cuts:
+            raise ValueError(f"No cuts lead into shots of section {operation['section']!r}")
+    else:
+        if operation["all"] is not True:
+            raise ValueError("transition all must be true")
+        cuts = list(range(len(edits) - 1))
+    for index in cuts:
+        _set_transition(edits[index], edits[index + 1], operation["type"], operation.get("strength", 1.0))
+
+
+def _repair_transitions(edits):
+    """After a reorder, drop transitions whose two shots are no longer adjacent."""
+    for index, shot in enumerate(edits):
+        marker = shot.get("transition_in")
+        if marker and (index == 0 or edits[index - 1]["id"] != marker.get("from")):
+            _clear_transition_in(shot)
+        marker = shot.get("transition_out")
+        if marker and (index == len(edits) - 1 or edits[index + 1]["id"] != marker.get("to")):
+            _clear_transition_out(shot)
+
+
 def apply_revisions(plan, operations):
     """Apply deterministic edits to a copy; errors leave the original untouched.
 
-    Supported operations: replace, effects, reframe, speed, duration, reorder.
+    Supported operations: replace, effects, transition, reframe, speed,
+    duration, reorder, plus the text, speech and graphics operations.
     A duration edit borrows frames from the following shot, or an explicit donor.
     """
     from project_plan import validate_plan, _slow_motion_authorized
@@ -142,6 +222,7 @@ def apply_revisions(plan, operations):
     from speech_project import SPEECH_OPERATIONS, apply_speech_operation, refresh_source_captions
     from timeline_map import refresh_anchors
     from graphics_commands import GRAPHICS_OPERATIONS, apply_graphics_operation
+    from edit_effects import validate_effects
 
     if not isinstance(operations, list) or not operations:
         raise ValueError("revisions must be a non-empty list of operations")
@@ -181,12 +262,15 @@ def apply_revisions(plan, operations):
             apply_speech_operation(result, operation)
         elif kind in GRAPHICS_OPERATIONS:
             apply_graphics_operation(result, operation)
+        elif kind == "transition":
+            _apply_transition(edits, operation)
         elif kind == "reorder":
             order = operation.get("order", [])
             if len(order) != len(edits) or set(order) != {e["id"] for e in edits}:
                 raise ValueError("reorder must contain every shot id exactly once")
             by_id = {e["id"]: e for e in edits}
             edits[:] = [by_id[i] for i in order]
+            _repair_transitions(edits)
         else:
             selected = _selected(edits, operation)
             if kind == "replace":
@@ -217,14 +301,22 @@ def apply_revisions(plan, operations):
                 shot.pop("action_anchor", None)
                 shot["reframe"] = {"mode": "auto", "subject": clip.get("subject"), "subject_start": clip["start"]}
             elif kind == "effects":
-                effects = operation.get("values")
-                if not isinstance(effects, dict) or not effects:
-                    raise ValueError("effects requires a non-empty values object")
-                unknown = set(effects) - {"flash", "zoom", "shake", "grade"}
-                if unknown:
-                    raise ValueError(f"Unknown effects: {sorted(unknown)}")
+                effects = operation.get("values", {})
+                reset = operation.get("reset", False)
+                if not isinstance(reset, bool):
+                    raise ValueError("effects reset must be true or false")
+                if not isinstance(effects, dict) or (not effects and not reset):
+                    raise ValueError("effects requires a non-empty values object or reset: true")
+                validate_effects(effects)
+                from edit_effects import NATURAL_GRADE, natural_look
                 for shot in selected:
-                    shot.setdefault("effects", {}).update(effects)
+                    if reset:
+                        shot["effects"] = {}
+                        shot.pop("transition_in", None)
+                        shot.pop("transition_out", None)
+                    shot.setdefault("effects", {}).update(copy.deepcopy(effects))
+                    if effects.get("grade") == NATURAL_GRADE:
+                        natural_look(shot["effects"], keep=effects)
             elif kind == "reframe":
                 mode = operation.get("mode", "manual")
                 if mode not in ("auto", "center", "manual", "contain"):
@@ -336,7 +428,7 @@ textarea{width:95%;height:180px;font:13px monospace}.muted{color:#a6b8cf}#status
 <section><label for="shot">Shot</label><select id="shot"></select><p id="details" class="muted"></p>
 <label for="replacement">Replacement clip</label><select id="replacement"></select><button id="replace">Queue replacement</button>
 <label for="seconds">Shot duration (seconds; borrow from adjacent shot)</label><input id="seconds" type="number" min="0.1" step="0.1"><button id="duration">Queue duration</button>
-<p><button id="flash">Remove all flashes</button> <button id="download">Download revisions.json</button></p>
+<p><button id="flash">Remove all flashes</button> <button id="accents">Remove all accent effects</button> <button id="download">Download revisions.json</button></p>
 <details><summary>Edit titles and subtitles</summary>
 <label for="textcue">Text cue</label><select id="textcue"></select>
 <label for="cuetext">Text</label><textarea id="cuetext" style="height:80px"></textarea>
@@ -353,6 +445,7 @@ shot.onchange=()=>selectShot(true);selectShot(false);
 el('replace').onclick=()=>{if(el('replacement').value)add({op:'replace',shot:shot.value,clip_id:el('replacement').value})};
 el('duration').onclick=()=>{let seconds=Number(el('seconds').value);if(Number.isFinite(seconds)&&seconds>0)add({op:'duration',shot:shot.value,seconds});else el('status').textContent='Enter a positive duration.'};
 el('flash').onclick=()=>add({op:'effects',all:true,values:{flash:0}});
+el('accents').onclick=()=>add({op:'effects',all:true,values:ACCENTS});
 const cues=[...data.titles.map(c=>({...c,track:'title'})),...data.subtitles.map(c=>({...c,track:'subtitle'}))];
 cues.forEach((c,i)=>el('textcue').add(new Option(`${c.track} · ${c.id} · ${c.text.slice(0,36)}`,String(i))));
 function selectCue(seek){let c=cues[Number(el('textcue').value)];if(!c)return;el('cuetext').value=c.text;el('cuestart').value=(c.start_frame/data.fps).toFixed(3);el('cueend').value=(c.end_frame/data.fps).toFixed(3);if(seek)player.currentTime=c.start_frame/data.fps}
@@ -362,6 +455,9 @@ el('textremove').onclick=()=>{let c=cues[Number(el('textcue').value)];if(c)add({
 el('download').onclick=()=>{if(!queue.length){el('status').textContent='Queue a change first.';return}let u=URL.createObjectURL(new Blob([JSON.stringify(queue,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=u;a.download='revisions.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};</script></html>'''
     # Substitute the JSON first so a filename containing DATA cannot become JS.
     # The distinct marker also avoids replacing user-controlled annotation text.
+    from edit_effects import ACCENT_EFFECTS
+    accents = json.dumps({name: 0 for name in ACCENT_EFFECTS + ("shake", "whip_in", "whip_out", "pulse")})
+    page = page.replace("values:ACCENTS}", "values:" + accents + "}")
     page = page.replace("const data=DATA,", "const data=" + data + ",")
     page = page.replace('src="VIDEO"', 'src="' + html.escape(media_url, quote=True) + '"')
     out.parent.mkdir(parents=True, exist_ok=True)
