@@ -124,15 +124,26 @@ def flash_bursts(edits, fps):
             for i in range(len(starts) - limit) if starts[i + limit][0] - starts[i][0] < fps]
 
 
-def flash_peak(edits, fps):
-    """The most flash/dip/invert cuts that start inside any one second."""
-    starts = [frame for frame, _ in _flash_starts(edits)]
-    return max((sum(0 <= other - frame < fps for other in starts) for frame in starts), default=0)
+def flash_runs(edits, fps):
+    """Overlapping bursts joined into runs of continuous over-limit flashing.
 
-
-def flash_burst_shots(edits, fps):
-    """IDs of every shot that takes part in a burst."""
-    return {shot_id for _, shots in flash_bursts(edits, fps) for shot_id in shots}
+    Returns (bursts, shot IDs, peak) triples in timeline order; peak is the
+    most flash/dip/invert cuts that start inside any one second of the run.
+    """
+    runs = []
+    for burst in flash_bursts(edits, fps):
+        if runs and runs[-1][1] & set(burst[1]):
+            runs[-1][0].append(burst)
+            runs[-1][1].update(burst[1])
+        else:
+            runs.append(([burst], set(burst[1])))
+    frame_of = {shot_id: frame for frame, shot_id in _flash_starts(edits)}
+    result = []
+    for bursts, shots in runs:
+        frames = [frame_of[shot_id] for shot_id in shots]
+        result.append((bursts, frozenset(shots),
+                       max(sum(0 <= other - frame < fps for other in frames) for frame in frames)))
+    return result
 
 
 def thin_flashes(edits, fps):

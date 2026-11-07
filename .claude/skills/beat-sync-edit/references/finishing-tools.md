@@ -64,7 +64,10 @@ Write `seq.json` yourself, one item per shot, in order:
   measured on the file you pass to `--audio`; for a flash every k beats, use
   `dur = k * 60 / tempo + flash`. Keep `k * 60 / tempo` at 1/3 s or more
   (k = 2 or more above 180 BPM, and check for a doubled tempo): the script
-  refuses more than three flashes in any second (SKILL.md rule 7).
+  refuses more than three flashes in any second (SKILL.md rule 7). The
+  opening flash counts as one at 0 s and each later flash is whitest
+  0.2 × `--flash` after it starts, so with the opening flash on keep
+  `dur[0]` at least `1/3 + 0.8 × flash`, or pass `--no-open-flash`.
 
 Iterate by editing `seq.json` and re-running the command.
 

@@ -232,13 +232,17 @@ class RevisionTests(unittest.TestCase):
         shot = plan["edits"][1]
         self.assertEqual((shot["kind"], shot["effects"].get("zoom", 1.0)), ("image", 1.0))
         self.assertAlmostEqual(shot["effects"]["blur_in"], .4)
+        plan["clips"].append({"id": "moving", "asset_id": "v", "source": str(self.image), "kind": "video", "start": 0.0, "end": 1.0})
+        back = apply_revisions(plan, [{"op": "replace", "shot": 2, "clip_id": "moving"}])
+        self.assertAlmostEqual(back["edits"][1]["effects"]["zoom"], 1.3)  # the punch returns with motion
 
     def test_zoom_transition_into_a_still_only_defocuses(self):
         plan = apply_revisions(self.plan, [{"op": "transition", "after": 1, "type": "zoom"}])
         shot = plan["edits"][1]
         self.assertNotIn("zoom", shot["effects"])
         self.assertAlmostEqual(shot["effects"]["blur_in"], .4)
-        self.assertNotIn("zoom_before", shot["transition_in"])
+        cut = apply_revisions(plan, [{"op": "transition", "after": 1, "type": "cut"}])
+        self.assertEqual(cut["edits"][1]["effects"].get("zoom", 1.0), 1.0)
 
     def test_reset_removes_the_whole_transition_on_its_cuts(self):
         plan = apply_revisions(self.plan, [{"op": "transition", "after": 1, "type": "whip", "strength": .8}])
@@ -335,10 +339,43 @@ class FlashRateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "photosensitive"):
             apply_revisions(squeeze, operations)
 
+    def flashing(self, frames, flashing):
+        """A plan with these shot lengths whose listed shot numbers flash."""
+        from project_workspace import _retime
+        plan = minimal_plan(Path(self.temp.name)/"still.png", shots=len(frames), frames=1)
+        for shot, count in zip(plan["edits"], frames):
+            shot.update(duration_frames=count, section="drop")
+        plan["duration_frames"] = sum(frames)
+        plan["duration"] = plan["audio"]["duration"] = sum(frames) / 30
+        plan["sections"] = [{"name": "drop", "start_frame": 0, "end_frame": sum(frames)}]
+        _retime(plan, update_sections=False)
+        for number in flashing:
+            plan["edits"][number - 1]["effects"]["flash"] = .5
+        return plan
+
+    def test_a_revision_may_not_join_old_bursts(self):
+        plan = self.flashing([8] * 24, [*range(1, 5), *range(13, 17)])
+        order = [shot["id"] for shot in plan["edits"]]
+        joined = order[:4] + order[12:16] + order[4:12] + order[16:]
+        with self.assertRaisesRegex(ValueError, "photosensitive"):
+            apply_revisions(plan, [{"op": "reorder", "order": joined}])
+        plan = self.flashing([7] * 4 + [30] + [7] * 4 + [60], [1, 2, 3, 4, 6, 7, 8, 9])
+        with self.assertRaisesRegex(ValueError, "photosensitive"):
+            apply_revisions(plan, [{"op": "duration", "shot": 5, "seconds": 7 / 30, "borrow_from": 10}])
+
+    def test_a_denser_burst_elsewhere_does_not_hide_a_squeeze(self):
+        plan = self.flashing([6] * 5 + [120] + [8] * 5 + [60], [1, 2, 3, 4, 5, 7, 8, 9, 10, 11])
+        operations = [{"op": "duration", "shot": n, "seconds": .2, "borrow_from": 12} for n in range(7, 11)]
+        with self.assertRaisesRegex(ValueError, "shot-007, shot-008, shot-009, shot-010"):
+            apply_revisions(plan, operations)
+
     def test_flash_montage_refuses_dense_flashing(self):
         from flash_montage import densest_second, flash_peaks
         self.assertEqual(densest_second(flash_peaks([60 / 200 + .5] * 8, .5)), 4)  # every beat at 200 BPM
         self.assertEqual(densest_second(flash_peaks([60 / 180 + .5] * 8, .5)), 3)
+        # fadewhite is whitest 20% in, so the opening flash plus beats from 0.15 s at 176 BPM is four.
+        self.assertEqual(densest_second(flash_peaks([.65] + [.84] * 5, .5)), 4)
+        self.assertEqual(densest_second(flash_peaks([.65] + [.84] * 5, .5, open_flash=False)), 3)
         script = Path(ROOT) / "flash_montage.py"
         seq = Path(self.temp.name) / "seq.json"
         seq.write_text(json.dumps({"items": [{"image": str(Path(self.temp.name)/"still.png"), "dur": .8}] * 8}), encoding="utf-8")
@@ -346,6 +383,10 @@ class FlashRateTests(unittest.TestCase):
                                  "--out", str(Path(self.temp.name)/"m.mp4")], capture_output=True, text=True, encoding="utf-8")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("4 white flashes within one second", result.stderr)
+        seq.write_text(json.dumps({"items": [{"image": str(Path(self.temp.name)/"still.png"), "dur": 2}]}), encoding="utf-8")
+        result = subprocess.run([sys.executable, "-X", "utf8", str(script), "--seq", str(seq), "--audio", "unused.wav",
+                                 "--out", str(Path(self.temp.name)/"m.mp4")], capture_output=True, text=True, encoding="utf-8")
+        self.assertIn("at least two items", result.stderr)
 
     def test_thinning_keeps_three_per_second(self):
         for shot in self.dense["edits"]:

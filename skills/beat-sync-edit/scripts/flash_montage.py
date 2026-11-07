@@ -86,16 +86,20 @@ def item_filter(idx, S, dur, fps, stretch, zoom, cx, cy, motion, is_video,
 MAX_FLASHES_PER_SECOND = 3  # more can trigger photosensitive seizures (SKILL.md rule 7)
 
 
-def flash_peaks(durations, flash, open_flash=True, close_flash=False):
-    """Times of the whitest frame of every flash: the opening fade, each xfade, the close."""
+def flash_peaks(durations, flash, open_flash=True, close_flash=False, fps=30):
+    """Times of the whitest frame of every flash.
+
+    The opening fade is whitest at 0, each xfade 0.2*flash after it starts
+    (ffmpeg's fadewhite peaks at progress 0.8), the closing fade on the last frame.
+    """
     peaks = [0.0] if open_flash else []
     total = float(durations[0])
     for duration in durations[1:]:
         offset = total - flash
-        peaks.append(offset + flash / 2)
+        peaks.append(offset + .2 * flash)
         total = offset + float(duration)
     if close_flash:
-        peaks.append(total)
+        peaks.append(total - 1 / fps)
     return peaks
 
 
@@ -126,12 +130,15 @@ def main():
     seq_dir = str(seq_path.parent)
     S, fps, flash = args.size, args.fps, args.flash
     durations = [float(it["dur"]) for it in items]
+    if len(items) < 2:
+        sys.exit("a flash montage needs at least two items")
     if any(duration <= flash for duration in durations):
         sys.exit(f"every dur must be longer than --flash ({flash}s)")
-    densest = densest_second(flash_peaks(durations, flash, args.open_flash, args.close_flash))
+    densest = densest_second(flash_peaks(durations, flash, args.open_flash, args.close_flash, fps))
     if densest > MAX_FLASHES_PER_SECOND:
         sys.exit(f"{densest} white flashes within one second: at most {MAX_FLASHES_PER_SECOND} are allowed, "
-                 "because rapid flashing can trigger photosensitive seizures. Lengthen dur or flash every 2+ beats.")
+                 "because rapid flashing can trigger photosensitive seizures. Lengthen dur, flash every 2+ beats, "
+                 "or pass --no-open-flash if the opening flash is the extra one.")
 
     # inputs: looped still or trimmed video clip per item
     cmd = ["ffmpeg", "-y"]

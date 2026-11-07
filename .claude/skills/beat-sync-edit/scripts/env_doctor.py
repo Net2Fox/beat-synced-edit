@@ -85,21 +85,21 @@ def _setup(requirements):
 
     Always the skill's own .venv, the interpreter SKILL.md runs every command
     with: never a system Python or another environment. Steps are None when a
-    person has to act first (install a newer Python, delete an old .venv).
+    person has to install a newer Python first.
     """
     install = [str(VENV_PYTHON), "-m", "pip", "install", "-r", str(SKILL / requirements)]
-    if VENV_PYTHON.exists():
-        old = _venv_version()
-        if old and _too_old(old):
-            return (f"the skill environment {VENV} uses Python {old[0]}.{old[1]}: delete it, recreate it with "
-                    f"Python {MINIMUM_TEXT} or newer, then run {_command(install)}"), None
+    old = _venv_version() if VENV_PYTHON.exists() else None
+    if VENV_PYTHON.exists() and not (old and _too_old(old)):
         return _command(install), [install]
+    clear = ["--clear"] if VENV_PYTHON.exists() else []  # an old .venv is rebuilt in place
+    prefix = f"the skill environment {VENV} uses Python {old[0]}.{old[1]}; recreate it: " if old and _too_old(old) else ""
     if _too_old(sys.version_info):
-        example = "py -3.12" if os.name == "nt" else "python3.12"
-        return (f"install Python {MINIMUM_TEXT} or newer, create the skill environment with it "
-                f"({example} -m venv {VENV}), then run {_command(install)}"), None
-    create = [sys.executable, "-m", "venv", str(VENV)]
-    return "; ".join(_command(step) for step in (create, install)), [create, install]
+        newer = ["py", "-3.12"] if os.name == "nt" else ["python3.12"]
+        create = [*newer, "-m", "venv", *clear, str(VENV)]
+        return (f"{prefix}install Python {MINIMUM_TEXT} or newer, then run "
+                f"{_command(create)}; {_command(install)}"), None
+    create = [sys.executable, "-m", "venv", *clear, str(VENV)]
+    return prefix + "; ".join(_command(step) for step in (create, install)), [create, install]
 
 
 def _check(name, status, detail, hint=None, required=True, fix_argv=None):

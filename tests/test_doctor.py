@@ -148,15 +148,16 @@ class DoctorUnitTests(unittest.TestCase):
         self.assertIsNone(steps)
         self.assertIn("Python 3.12 or newer", hint)
         self.assertNotIn(f"{sys.executable} -m venv", hint)
+        newer = ["py", "-3.12"] if os.name == "nt" else ["python3.12"]
+        self.assertIn(env_doctor._command([*newer, "-m", "venv", str(root / ".venv")]), hint)  # quoted path
 
-    def test_a_skill_venv_made_with_an_old_python_must_be_recreated(self):
-        self.skill("3.11.9")
+    def test_a_skill_venv_made_with_an_old_python_is_recreated_in_place(self):
+        root, python = self.skill("3.11.9")
         hint, steps = env_doctor._setup("requirements.txt")
-        self.assertIsNone(steps)
-        self.assertIn("uses Python 3.11: delete it", hint)
+        self.assertEqual(steps[0], [sys.executable, "-m", "venv", "--clear", str(root / ".venv")])
+        self.assertIn("uses Python 3.11; recreate it", hint)
         check = env_doctor._venv_check()
-        self.assertEqual(check["status"], "warn")
-        self.assertIn("delete it", check["hint"])
+        self.assertEqual((check["status"], check["fix_argv"]), ("warn", steps))
 
     def test_commands_are_quoted_for_the_shell(self):
         argv = ["/opt/My Python/python", "-m", "pip", "install", "-r", "/skills/it's/requirements.txt"]

@@ -164,14 +164,15 @@ def _set_transition(before, after, kind, strength):
     _clear_transition_out(before)
     if kind == "cut":
         return
-    if after.get("kind") == "image":
-        # A photo's zoom is a slow push over the whole shot, not a punch at the
-        # cut, so a zoom transition into a still keeps only its defocus.
-        incoming.pop("zoom", None)
     before["effects"].update({k: v for k, v in outgoing.items() if v != EFFECTS[k][3]})
     marker = {"type": kind, "from": before["id"]}
     if "zoom" in incoming:
-        marker["zoom_before"] = after["effects"].get("zoom", 1.0)  # restored when the transition changes
+        # zoom_before is restored when the transition changes. A photo's zoom is
+        # a slow push over the whole shot, not a punch at the cut, so a still
+        # keeps only the defocus; the punch returns if it becomes video again.
+        marker.update(zoom_before=after["effects"].get("zoom", 1.0), zoom=incoming["zoom"])
+        if after.get("kind") == "image":
+            incoming.pop("zoom")
     after["effects"].update({k: v for k, v in incoming.items() if v != EFFECTS[k][3]})
     after["transition_in"] = marker
     before["transition_out"] = {"type": kind, "to": after["id"]}
@@ -230,13 +231,19 @@ def _apply_transition(edits, operation):
 def _repair_transitions(edits):
     """After any edit, drop transitions whose two shots are no longer adjacent.
 
-    A shot that became a still (replace, B-roll) loses a zoom transition's
-    punch: on a photo, zoom is a slow push over the whole shot.
+    A zoom transition's punch follows the shot's kind (replace, B-roll): a
+    still gets the zoom it had before, a video the punch, unless an explicit
+    zoom has replaced both (that removes zoom_before).
     """
     for index, shot in enumerate(edits):
         marker = shot.get("transition_in")
-        if marker and shot.get("kind") == "image" and "zoom_before" in marker:
-            shot.setdefault("effects", {})["zoom"] = marker.pop("zoom_before")
+        if marker and "zoom_before" in marker and "zoom" in marker:
+            effects = shot.setdefault("effects", {})
+            current = effects.get("zoom", 1.0)
+            if shot.get("kind") == "image" and current == marker["zoom"]:
+                effects["zoom"] = marker["zoom_before"]
+            elif shot.get("kind") != "image" and current == marker["zoom_before"]:
+                effects["zoom"] = marker["zoom"]
         marker = shot.get("transition_in")
         if marker and (index == 0 or edits[index - 1]["id"] != marker.get("from")):
             _clear_transition_in(shot)
@@ -282,10 +289,11 @@ def apply_revisions(plan, operations):
     validate_plan(result)
     edits = result["edits"]
     fps = result["output"]["fps"]
-    from edit_effects import flash_burst_message, flash_burst_shots, flash_bursts, flash_peak
+    from edit_effects import flash_burst_message, flash_runs
     # An older project may already flash too often; a revision may keep, shrink
-    # or move those bursts, but not pull another shot into one or make one denser.
-    burst_shots_before, peak_before = flash_burst_shots(edits, fps), flash_peak(edits, fps)
+    # or move those bursts, but not pull another shot into one, join two, or
+    # make one denser. Each run is compared with the one run it came from.
+    runs_before = [(shots, peak) for _, shots, peak in flash_runs(edits, fps)]
     catalog = {str(c["id"]): c for c in result.get("clips", [])}
     slowest_before = {shot["id"]: _slowest(shot, fps) for shot in edits}
     explicitly_retimed = set()
@@ -419,10 +427,9 @@ def apply_revisions(plan, operations):
         refresh_source_captions(result)
     refresh_anchors(result)
     validate_plan(result)
-    bursts = flash_bursts(result["edits"], fps)
-    grown = [burst for burst in bursts if set(burst[1]) - burst_shots_before]
-    if grown or (bursts and flash_peak(result["edits"], fps) > peak_before):
-        raise ValueError("This revision would leave " + flash_burst_message(grown or bursts, fps))
+    for bursts, shots, peak in flash_runs(result["edits"], fps):
+        if not any(shots <= old and peak <= old_peak for old, old_peak in runs_before):
+            raise ValueError("This revision would leave " + flash_burst_message(bursts, fps))
     result["revision"] = int(plan.get("revision", 0)) + 1
     result.setdefault("revision_log", []).append({
         "revision": result["revision"], "at": datetime.now(timezone.utc).isoformat(),

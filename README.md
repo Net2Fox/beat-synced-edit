@@ -124,7 +124,8 @@ the caption font) with a fix for each problem, and exits with 0 when every
 required component is ready and 4 otherwise. `warnings` lists optional items
 that need attention (PyAV 19+, the caption font, running outside the skill's
 `.venv`); `--strict` also fails on those and on missing speech recognition.
-Each hint comes with `fix_argv`, the same commands as argument lists. It works before the requirements are
+Install hints that are plain commands also come as `fix_argv`, the same
+commands as argument lists. It works before the requirements are
 installed, so run it first when something fails; run with another Python, it
 prints the commands that create and fill the skill's `.venv`.
 
