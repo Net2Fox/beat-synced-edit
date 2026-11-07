@@ -7,6 +7,7 @@ local_files_only=True to run without model downloads.
 """
 
 import math
+import os
 from pathlib import Path
 import sys
 
@@ -22,6 +23,40 @@ def _time(value, name):
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
         raise ValueError(f"Recognizer returned invalid {name}")
     return float(value)
+
+
+def _user_cache_dir():
+    if os.name == "nt":
+        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Caches"
+    return Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
+
+
+def default_model_dir(project_dir):
+    """Folder for Whisper model downloads when --model-dir is not given.
+
+    BEAT_SYNC_MODEL_DIR wins. A non-empty ``models`` folder beside the project
+    (from an earlier run) is reused. Otherwise one shared per-user cache keeps a
+    model to a single download for every project; if that folder cannot be
+    written (for example inside an agent sandbox), the project's own
+    ``models`` folder is used.
+    """
+    configured = os.environ.get("BEAT_SYNC_MODEL_DIR")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    local = Path(project_dir).resolve() / "models"
+    if local.is_dir() and any(local.iterdir()):
+        return local
+    shared = _user_cache_dir() / "beat-sync-edit" / "models"
+    try:
+        shared.mkdir(parents=True, exist_ok=True)
+        probe = shared / ".write-test"
+        probe.write_text("", encoding="utf-8")
+        probe.unlink()
+        return shared.resolve()
+    except OSError:
+        return local
 
 
 def transcribe_audio(audio_path, model="small", language=None, device="cpu",

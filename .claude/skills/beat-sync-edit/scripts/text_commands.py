@@ -174,7 +174,8 @@ def run_text_command(args):
             raise ValueError("Transcript path cannot overwrite the project, output project, subtitles or source media")
         if args.max_chars < 1 or args.max_words < 1 or not math.isfinite(args.max_duration) or args.max_duration <= 0:
             raise ValueError("Caption character, word and duration limits must be positive")
-        model_dir = Path(args.model_dir).resolve() if args.model_dir else work / "models"
+        from speech_transcribe import default_model_dir
+        model_dir = Path(args.model_dir).resolve() if args.model_dir else default_model_dir(work)
         model_dir.mkdir(parents=True, exist_ok=True)
         # Recognize only the portion that will be audible. No media is uploaded.
         with tempfile.TemporaryDirectory(prefix="speech-", dir=work) as temporary:

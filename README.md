@@ -146,8 +146,11 @@ environment, or run it yourself with the interpreter from above:
 
 Whisper model weights download on first use. The default is multilingual
 `small`; `tiny` is useful for a quick check and `.en` models are English-only.
-Models are cached beside the project in `models/` unless `--model-dir` selects
-another location. `--local-files-only` requires an already cached/local model.
+Each model downloads once into a shared per-user cache
+(`~/.cache/beat-sync-edit/models`; `%LOCALAPPDATA%\beat-sync-edit\models` on
+Windows) and is reused by every project. Set `BEAT_SYNC_MODEL_DIR` or pass
+`--model-dir` to choose another folder; if the cache is not writable, models
+go to `models/` beside the project. `--local-files-only` requires an already cached/local model.
 Recognition processes audio locally; it does not upload it to a transcription
 service. The agent itself follows its own model and tool data-handling settings.
 Manual titles and SRT/VTT files do not need Whisper.

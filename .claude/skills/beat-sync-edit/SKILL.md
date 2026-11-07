@@ -26,7 +26,7 @@ On Windows use `python -m venv <skill>/.venv`. FFmpeg and ffprobe must be on
 PATH. Speech recognition is optional: install it only when there is speech to
 transcribe and no transcript was supplied, with
 `<python> -m pip install -r <skill>/requirements-transcription.txt`. Its first
-run downloads model weights.
+run downloads the model once into a cache shared by all projects.
 
 **Command notation.** In this skill, `edit_project.py CMD ARGS` means
 

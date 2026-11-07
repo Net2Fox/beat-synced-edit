@@ -87,7 +87,7 @@ It recognizes the first that applies (`--offset` shifts the captions):
 | `--model` | `small` | Whisper model name or a converted model folder; `tiny` is a quick multilingual check; `.en` models are English-only |
 | `--language` | detected | e.g. `ru`, `en` |
 | `--device`, `--compute-type` | `cpu`, `int8` | `--device` also takes `cuda`, `auto`; for GPU use `--device cuda --compute-type float16` with CUDA libraries installed |
-| `--model-dir` | `<work>/models` | download/cache folder; the model downloads on first use |
+| `--model-dir` | shared cache | download/cache folder. Default: `BEAT_SYNC_MODEL_DIR` if set, else an existing `models/` beside the project, else one per-user cache (`~/.cache/beat-sync-edit/models`, `%LOCALAPPDATA%\beat-sync-edit\models` on Windows, `~/Library/Caches/...` on macOS), else `models/` beside the project when that cache is not writable. A model downloads once for all projects. |
 | `--local-files-only` | off | never download |
 | `--max-words`, `--max-chars`, `--max-duration` | 7, 42, 3 s | cue limits; cues also break at sentence punctuation and pauses over 0.6 s; words are never split |
 | `--transcript` | `<work>/transcript.json` | raw result: source, extraction start, segments timed from the extracted audio |

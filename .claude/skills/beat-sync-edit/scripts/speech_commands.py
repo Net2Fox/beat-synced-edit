@@ -103,8 +103,8 @@ def probe_asset(path, require_speech=True):
 
 
 def _asr(args, path, work):
-    from speech_transcribe import transcribe_audio
-    model_dir = Path(args.model_dir).resolve() if args.model_dir else Path(work)/"models"
+    from speech_transcribe import default_model_dir, transcribe_audio
+    model_dir = Path(args.model_dir).resolve() if args.model_dir else default_model_dir(work)
     model_dir.mkdir(parents=True, exist_ok=True)
     return transcribe_audio(path, model=args.model, language=args.language, device=args.device,
                             compute_type=args.compute_type, model_dir=model_dir, local_files_only=args.local_files_only)

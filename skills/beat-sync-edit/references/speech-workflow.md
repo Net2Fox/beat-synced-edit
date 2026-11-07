@@ -31,8 +31,8 @@ Prefer a transcript the user supplied, passed with `--transcript`:
 Without one, `speech-analyze`, `speech-plan`, `speech-batch` and `speech-retry`
 (without `--file`) recognize speech locally with faster-whisper (default
 `--model small`, `--device cpu`, `--compute-type int8`; nothing is uploaded).
-The model downloads on first use into `models/` beside the output file or
-project unless `--model-dir` is given; other flags and offline use are in
+The model downloads once on first use into a shared cache (see `--model-dir`);
+other flags and offline use are in
 [Local speech recognition](text-and-graphics.md#local-speech-recognition).
 Recognition mishears names, terms and speech over music: read the text and fix
 it with `speech-correct`. Install the optional requirements once:

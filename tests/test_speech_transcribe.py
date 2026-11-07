@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import _paths  # noqa: F401  (makes the skill's scripts importable)
-from speech_transcribe import transcribe_audio
+from speech_transcribe import default_model_dir, transcribe_audio
 
 
 class SpeechTranscribeTests(unittest.TestCase):
@@ -93,6 +93,44 @@ class SpeechTranscribeTests(unittest.TestCase):
     def test_translation_not_silently_enabled(self):
         with patch.dict("sys.modules", {"faster_whisper": self.package}), self.assertRaisesRegex(ValueError, "Only transcription"):
             transcribe_audio(self.audio, task="translate")
+
+
+class ModelDirectoryTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.project = self.root / "project-a"
+        self.project.mkdir()
+        cache = self.root / "cache"
+        self.env = {"XDG_CACHE_HOME": str(cache), "LOCALAPPDATA": str(cache), "HOME": str(self.root / "home")}
+
+    def resolve(self, project=None, **extra):
+        import os
+        with patch.dict("os.environ", {**self.env, **extra}):
+            if "BEAT_SYNC_MODEL_DIR" not in extra:
+                os.environ.pop("BEAT_SYNC_MODEL_DIR", None)  # restored by patch.dict
+            with patch("speech_transcribe.sys.platform", "linux"), patch("speech_transcribe.os.name", "posix"):
+                return default_model_dir(project or self.project)
+
+    def test_projects_share_one_user_cache(self):
+        other = self.root / "project-b"
+        other.mkdir()
+        first, second = self.resolve(), self.resolve(other)
+        self.assertEqual(first, second)
+        self.assertEqual(first, (self.root / "cache" / "beat-sync-edit" / "models").resolve())
+
+    def test_environment_and_existing_project_models_win(self):
+        configured = self.root / "my-models"
+        self.assertEqual(self.resolve(BEAT_SYNC_MODEL_DIR=str(configured)), configured.resolve())
+        (self.project / "models" / "models--Systran--faster-whisper-small").mkdir(parents=True)
+        self.assertEqual(self.resolve(), (self.project / "models").resolve())
+
+    def test_unwritable_user_cache_falls_back_to_the_project(self):
+        blocker = self.root / "not-a-folder"
+        blocker.write_text("x")
+        self.env.update(XDG_CACHE_HOME=str(blocker), LOCALAPPDATA=str(blocker))
+        self.assertEqual(self.resolve(), (self.project / "models").resolve())
 
 
 if __name__ == "__main__":
