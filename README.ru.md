@@ -338,7 +338,7 @@ edit_project.py render work/project.json -o outputs/captioned.mp4
 - [Монтаж по речи и субтитры с привязкой к исходнику](skills/beat-sync-edit/references/speech-workflow.md)
 - [Титры, субтитры, распознавание речи, стили и графика](skills/beat-sync-edit/references/text-and-graphics.md)
 - [Микширование звука и перестановка музыки](skills/beat-sync-edit/references/audio-workflow.md)
-- [Проверка экспорта, пакетный рендер и автоматизация через JSON](skills/beat-sync-edit/references/review-and-automation.md)
+- [Проверка экспорта, пакетный рендер, вывод CLI и коды выхода](skills/beat-sync-edit/references/review-and-automation.md)
 - [Инструменты финальной обработки: монтаж со вспышками, over-under, свои эффекты FFmpeg](skills/beat-sync-edit/references/finishing-tools.md)
 
 `skills/beat-sync-edit` — единственный источник скилла: `SKILL.md`,

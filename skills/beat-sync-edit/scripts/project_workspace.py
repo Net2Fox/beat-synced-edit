@@ -89,6 +89,14 @@ def _retime(plan, update_sections=False):
         plan["timing_manually_revised"] = True
 
 
+def _slowest(shot, fps):
+    """Slowest playback speed within a shot (1 for photos)."""
+    if shot.get("kind") != "video":
+        return 1.0
+    from project_plan import speed_bounds
+    return speed_bounds(shot, shot["duration_frames"] / fps)[0]
+
+
 def _replacement_span(plan, shot, clip):
     """Find unused footage for a replacement, preferring normal-speed playback."""
     if clip["kind"] == "image":
@@ -113,10 +121,9 @@ def _replacement_span(plan, shot, clip):
     if enough:
         start, _ = enough[0]
         return start, start + required
-    from project_plan import _slow_motion_authorized
-    policies = plan.get("policies", {})
-    minimum_rate = policies.get("min_speed", .5) if _slow_motion_authorized(policies) else max(1, policies.get("min_speed", 1))
-    minimum = required * minimum_rate
+    # Without an explicit source range a replacement never slows its shot, even
+    # when slow motion is allowed: slowing must be asked for with a range.
+    minimum = required * max(1, plan.get("policies", {}).get("min_speed", 1))
     if intervals:
         start, end = max(intervals, key=lambda span: span[1] - span[0])
         if end - start >= minimum - 1e-7:
@@ -160,6 +167,8 @@ def apply_revisions(plan, operations):
     edits = result["edits"]
     fps = result["output"]["fps"]
     catalog = {str(c["id"]): c for c in result.get("clips", [])}
+    slowest_before = {shot["id"]: _slowest(shot, fps) for shot in edits}
+    explicitly_retimed = set()
     for operation in operations:
         if not isinstance(operation, dict):
             raise ValueError("Each revision must be an object")
@@ -192,8 +201,15 @@ def apply_revisions(plan, operations):
                 available = float(clip["end"]) - start
                 required = shot["duration_frames"] / fps
                 end = _number(operation.get("source_end", default_end if default_end is not None else start + min(available, required)), "source_end")
-                if clip["kind"] == "video" and not (clip["start"] <= start < end <= clip["end"] + 1e-6):
+                ranged = "source_start" in operation or "source_end" in operation
+                if clip["kind"] == "image":
+                    if ranged and (abs(start - float(clip["start"])) > 1e-6 or abs(end - float(clip["end"])) > 1e-6):
+                        raise ValueError("A photo has no motion to slow or trim; omit source_start/source_end for an image clip")
+                    start, end = float(clip["start"]), float(clip["end"])
+                elif not (clip["start"] <= start < end <= clip["end"] + 1e-6):
                     raise ValueError("Replacement source range must fit inside the selected clip")
+                if ranged:
+                    explicitly_retimed.add(shot["id"])
                 shot.update(asset_id=clip["asset_id"], clip_id=clip["id"], source=clip["source"],
                             kind=clip["kind"], source_start=start, source_end=end,
                             tags=copy.deepcopy(clip.get("tags", [])), shot_type=normalize_shot_type(clip.get("shot_type")))
@@ -226,6 +242,7 @@ def apply_revisions(plan, operations):
                 if not isinstance(points, list) or len(points) < 2:
                     raise ValueError("speed requires at least two {at, speed} points")
                 for shot in selected:
+                    explicitly_retimed.add(shot["id"])
                     shot["speed_points"] = copy.deepcopy(points)
                     if "anchor" in operation:
                         shot["action_anchor"] = copy.deepcopy(operation["anchor"])
@@ -249,9 +266,15 @@ def apply_revisions(plan, operations):
                     raise ValueError("Not enough frames in donor shot; choose another borrow_from shot")
                 shot["duration_frames"] = frames
                 donor["duration_frames"] -= delta
+                explicitly_retimed.add(shot["id"])  # the named shot, never its donor
             else:
                 raise ValueError(f"Unknown revision operation: {kind!r}")
         _retime(result, update_sections=kind in ("duration", "reorder"))
+    for shot in edits:
+        if shot["id"] not in explicitly_retimed and _slowest(shot, fps) < 1 - 1e-6 <= slowest_before.get(shot["id"], 1):
+            raise ValueError(f"{shot['id']} would play at {shot['average_speed']:.2f}x. Slow motion only applies to the shot "
+                             "a revision names (duration, speed, or replace with source_start/source_end); give this "
+                             "shot more source with a ranged replace in the same list, or choose another borrow_from")
     if any(operation.get("op") not in TEXT_OPERATIONS for operation in operations):
         refresh_source_captions(result)
     refresh_anchors(result)

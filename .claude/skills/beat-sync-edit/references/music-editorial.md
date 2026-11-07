@@ -98,7 +98,7 @@ only; it detects nothing visually.
 
 Preference weights (-20 to 20) add to the score per matching tag (lower-case
 keys), annotated `shot_type` (canonical names; aliases such as `close-up` match
-`close`) or `asset_id`; `events` holds the records `feedback`
+`close`; an unknown or repeated shot type is an error) or `asset_id`; `events` holds the records `feedback`
 appends. Set weights only for what the user asked for, and pass the same file to
 `candidates --preferences` and `plan --preferences <work>/preferences.json --query "..."`.
 

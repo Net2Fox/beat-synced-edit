@@ -55,6 +55,14 @@ def validate_preferences(profile):
         for value in profile.get(name, {}).values():
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or abs(value) > 20:
                 raise ValueError(f"{name} values must be finite between -20 and 20")
+    seen = {}
+    for key in profile.get("shot_weights", {}):
+        canonical = normalize_shot_type(key)
+        if canonical not in SHOT_TYPES:
+            raise ValueError(f"Unknown shot_weights key: {key}; use one of {', '.join(SHOT_TYPES)}")
+        if canonical in seen:
+            raise ValueError(f"shot_weights lists {seen[canonical]!r} and {key!r}, which are the same shot type")
+        seen[canonical] = key
     if not isinstance(profile.get("events", []), list):
         raise ValueError("Feedback events must be a list")
     for event in profile.get("events", []):
@@ -104,8 +112,8 @@ def preference_score(clip, profile=None, query=""):
     matched = sorted(query_terms & observed)
     components = {
         "tag_preferences": sum(float(profile.get("tag_weights", {}).get(tag, 0)) for tag in tags),
-        "shot_preference": sum(float(weight) for name, weight in profile.get("shot_weights", {}).items()
-                               if normalize_shot_type(name) == normalize_shot_type(clip.get("shot_type"))),
+        "shot_preference": next((float(weight) for name, weight in profile.get("shot_weights", {}).items()
+                                 if normalize_shot_type(name) == normalize_shot_type(clip.get("shot_type"))), 0.),
         "asset_preference": float(profile.get("asset_weights", {}).get(str(clip.get("asset_id")), 0)),
         "query_match": 3. * len(matched) / max(1, len(query_terms)),
         "accepted_feedback": 2. if latest_decisions(profile).get(candidate_key(clip), {}).get("decision") == "accept" else 0.,

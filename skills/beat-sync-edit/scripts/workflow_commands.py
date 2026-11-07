@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import subprocess
 from pathlib import Path
 
 from project_workspace import read_json, write_json
@@ -98,7 +99,7 @@ def run_workflow_command(args):
             raise ValueError("Batch manifest needs a nonempty jobs list")
         work = Path(args.work).resolve()
         work.mkdir(parents=True, exist_ok=True)
-        prepared, outputs, protected = [], set(), {manifest}
+        prepared, outputs, names, protected = [], set(), set(), {manifest}
         for job in jobs:
             if not isinstance(job, dict) or set(job) - {"project", "output", "preview"}:
                 raise ValueError("Each job accepts project, output and preview")
@@ -107,6 +108,10 @@ def run_workflow_command(args):
             output = (manifest.parent / output).resolve()
             if output in outputs or output.suffix.lower() != ".mp4":
                 raise ValueError("Each job needs a distinct .mp4 output")
+            if output.stem.casefold() in names:
+                raise ValueError(f"Two jobs export '{output.stem}'; reports in {work / 'reports'} are named after "
+                                 "the output file, so give each job a distinct file name")
+            names.add(output.stem.casefold())
             plan = read_json(project)
             validate_plan(plan)
             protected.add(project)
@@ -121,13 +126,13 @@ def run_workflow_command(args):
             raise ValueError("Batch report would overwrite an input")
         from render_qa import guard_export_outputs
         for project, output, plan, preview in prepared:
-            guard_export_outputs(plan, output, extra_protected=protected)
+            guard_export_outputs(plan, output, work / "reports", extra_protected=protected)
         results = []
         for project, output, plan, preview in prepared:
             try:
                 result = render_with_qa(plan, str(output), preview, str(work / "cache"), qa_dir=str(work / "reports"), project_path=project)
                 results.append({"project": str(project), "ok": True, "result": result})
-            except (ValueError, OSError, RuntimeError) as exc:
+            except (ValueError, KeyError, TypeError, OSError, RuntimeError, subprocess.SubprocessError, ArithmeticError) as exc:
                 results.append({"project": str(project), "ok": False, "error": str(exc)})
                 if not args.continue_on_error:
                     break

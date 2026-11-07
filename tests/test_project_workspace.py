@@ -126,9 +126,24 @@ class RevisionTests(unittest.TestCase):
         replace = {"op": "replace", "shot": 1, "clip_id": clip["id"]}
         with self.assertRaisesRegex(ValueError, "long enough"):
             apply_revisions(self.plan, [replace])
-        revised = apply_revisions(self.plan, [{"op": "slow_motion_policy", "prompt": "Slow the replacement with interpolation.",
-                                              "interpolation": "optical_flow"}, replace])
+        policy = {"op": "slow_motion_policy", "prompt": "Slow the replacement with interpolation.", "interpolation": "optical_flow"}
+        # Permission alone never slows a replacement: the range must ask for it.
+        with self.assertRaisesRegex(ValueError, "long enough"):
+            apply_revisions(self.plan, [policy, replace])
+        ranged = dict(replace, source_start=clip["start"], source_end=clip["end"])
+        revised = apply_revisions(self.plan, [policy, ranged])
         self.assertAlmostEqual(revised["edits"][0]["average_speed"], .75)
+
+    def test_permission_never_slows_a_donor_or_a_photo(self):
+        policy = {"op": "slow_motion_policy", "prompt": "Slow the first shot down.", "interpolation": "optical_flow"}
+        plan = apply_revisions(self.plan, [policy])
+        shorter = (plan["edits"][1]["duration_frames"] - 3) / 30
+        with self.assertRaisesRegex(ValueError, "shot-001 would play"):
+            apply_revisions(plan, [{"op": "duration", "shot": 2, "seconds": shorter, "borrow_from": 1}])
+        photo = {"id": "photo", "asset_id": "photo", "source": plan["edits"][0]["source"], "kind": "image", "start": 0, "end": 0}
+        plan["clips"].append(photo)
+        with self.assertRaisesRegex(ValueError, "photo has no motion"):
+            apply_revisions(plan, [{"op": "replace", "shot": 1, "clip_id": "photo", "source_start": 0, "source_end": 1}])
 
     def test_explicit_policy_upgrade_can_open_a_legacy_slow_project(self):
         original = self.plan["edits"][0]

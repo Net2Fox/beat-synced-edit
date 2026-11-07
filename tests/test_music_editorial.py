@@ -12,7 +12,8 @@ from PIL import Image
 
 import _paths  # noqa: F401  (makes the skill's scripts importable)
 from editorial_commands import register_editorial_commands, run_editorial_command
-from editorial_feedback import candidate_features, normalize_shot_type, preference_score, rank_candidates, record_feedback
+from editorial_feedback import (candidate_features, normalize_shot_type, preference_score, rank_candidates,
+                                record_feedback, validate_preferences)
 from media_library import apply_annotations
 from media_library import analyze_library
 from music_structure import analyze_waveform, apply_overrides
@@ -148,6 +149,10 @@ class EditorialTests(unittest.TestCase):
         self.assertEqual(clips[0]["shot_type"], "close")
         with self.assertRaisesRegex(ValueError, "Unknown shot_type"):
             apply_annotations([{"id": "c2", "start": 0, "end": 2}], {"clips": {"c2": {"shot_type": "dutch angle"}}})
+        with self.assertRaisesRegex(ValueError, "Unknown shot_weights key"):
+            validate_preferences({"shot_weights": {"closup": 1}})
+        with self.assertRaisesRegex(ValueError, "same shot type"):
+            validate_preferences({"shot_weights": {"close": 15, "close-up": 15}})
 
     def test_feedback_identity_survives_id_change_but_not_changed_source(self):
         _, library = inputs()

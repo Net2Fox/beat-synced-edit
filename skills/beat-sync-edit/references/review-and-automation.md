@@ -14,7 +14,10 @@ Contents: [Export QA](#export-qa) · [Review an export](#review-an-export) ·
 `preview` and `render` run export QA on the encoded MP4 themselves and exit with code 4
 when a technical check fails, leaving the MP4 and its reports on disk; never deliver
 that file. Reports are named after the output and written to `reports/` in the
-project's folder (`<work>/reports/`), so the delivery folder holds only the video:
+project's folder (`<work>/reports/`), so the delivery folder holds only the video.
+Give every output its own file name: `render` refuses to replace the reports of
+another existing video with the same name (for example `vertical/final.mp4` and
+`square/final.mp4`).
 
 | File | Contents |
 |---|---|
@@ -34,7 +37,7 @@ unexplained ones add one `review_notes` line per kind, as do a true peak at or a
 ## Review an export
 
 Read these from `<work>/reports/<name>.qa.json` (`qa.report`); the printed result is
-long and puts `qa` last.
+long, so read the report file instead.
 
 1. Open every PNG in `contact_sheets`. Tiles, labelled in output seconds, show the
    first, middle and last frame, the frames before, at and after every cut, and the
@@ -103,7 +106,7 @@ edit_project.py batch-render <work>/jobs.json --work <work>/batch
 {"jobs": [{"project": "short.json", "output": "short.mp4"}, {"project": "long.json", "output": "long.mp4", "preview": true}]}
 ```
 
-A job accepts only `project`, `output` (a distinct `.mp4`) and `preview` (default
+A job accepts only `project`, `output` (an `.mp4` whose file name no other job uses, because reports are named after it) and `preview` (default
 `false`; preview size, no HTML page); relative paths resolve beside the manifest. All
 projects and outputs are checked before the first render. Shots are cached in
 `<work>/batch/cache`; each job runs export QA with reports in `<work>/batch/reports`;
@@ -113,12 +116,15 @@ any failure gives `all_succeeded: false` and exit code 4.
 
 ## CLI output and errors
 
-Every command prints its result as JSON on stdout; progress goes to stderr. An error
-is one `Error: <message>` line on stderr with exit code 2 (bad arguments, values or
-JSON), 3 (missing or unreadable file) or 4 (FFmpeg or render failure, failed technical
-QA, failed batch job). The CLI refuses an output that would overwrite one of its
-inputs, including media named inside input JSON files, so keep outputs, reports and
-caches out of input folders.
+Every command prints its result as JSON on stdout; progress goes to stderr. On any
+error stdout is empty and the exit code says what kind it is: 2 (bad arguments, values
+or JSON), 3 (missing or unreadable file) or 4 (FFmpeg or render failure, failed
+technical QA, failed batch job). Bad command-line arguments print argparse's `usage:`
+line and `edit_project.py CMD: error: <message>`; other failures end stderr with
+`Error: <message>`, which can span several lines (FFmpeg's own output is included).
+The CLI refuses an output that would overwrite one of its inputs, including media
+named inside input JSON files, so keep outputs, reports and caches out of input
+folders.
 
 ## CLI discovery
 

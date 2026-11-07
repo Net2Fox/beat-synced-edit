@@ -322,7 +322,7 @@ for style settings, offsets, model caches and word timestamps.
 - [Speech-first edits and source-bound captions](skills/beat-sync-edit/references/speech-workflow.md)
 - [Titles, captions, speech recognition, styles and graphics](skills/beat-sync-edit/references/text-and-graphics.md)
 - [Audio mixing and music arrangement](skills/beat-sync-edit/references/audio-workflow.md)
-- [Export checks, batch rendering and JSON automation](skills/beat-sync-edit/references/review-and-automation.md)
+- [Export checks, batch rendering, CLI output and exit codes](skills/beat-sync-edit/references/review-and-automation.md)
 - [Finishing tools: flash montage, over-under, custom FFmpeg looks](skills/beat-sync-edit/references/finishing-tools.md)
 
 `skills/beat-sync-edit` is the only source of the skill: edit its `SKILL.md`,

@@ -36,6 +36,46 @@ class ExportSafeguardTests(unittest.TestCase):
         self.assertEqual(Path(result["qa"]["report"]), reports/"final.qa.json")
         for name in ("final.verification.json", "final.qa.json", "final.audio.json", "final.review-01.png"):
             self.assertTrue((reports/name).is_file(), name)
+        from cli_guard import tool_signature
+        from render_qa import file_hash
+        self.assertEqual(result["provenance"]["tool"], tool_signature())
+        self.assertEqual(result["provenance"]["output_sha256"], file_hash(outputs/"final.mp4"))
+
+    def test_same_file_name_in_another_folder_cannot_replace_existing_reports(self):
+        from edit_project import parser, run
+        run(parser().parse_args(["render", str(self.project), "-o", str(self.root/"vertical"/"final.mp4")]))
+        with self.assertRaisesRegex(ValueError, "different file name"):
+            run(parser().parse_args(["render", str(self.project), "-o", str(self.root/"square"/"final.mp4")]))
+        self.assertFalse((self.root/"square"/"final.mp4").exists())
+        (self.root/"vertical"/"final.mp4").unlink()  # reports of a deleted video may be replaced
+        run(parser().parse_args(["render", str(self.project), "-o", str(self.root/"square"/"final.mp4")]))
+
+    def test_batch_refuses_two_jobs_with_the_same_output_name(self):
+        from edit_project import parser, run
+        jobs = self.root/"jobs.json"
+        write_json(jobs, {"jobs": [{"project": "project.json", "output": "a/final.mp4"},
+                                   {"project": "project.json", "output": "b/final.mp4"}]})
+        with self.assertRaisesRegex(ValueError, "distinct file name"):
+            run(parser().parse_args(["batch-render", str(jobs), "--work", str(self.root/"batch")]))
+        self.assertFalse((self.root/"a").exists() or (self.root/"b").exists())
+
+    def test_failed_export_qa_exits_4_with_empty_stdout(self):
+        import io
+        from contextlib import redirect_stdout, redirect_stderr
+        from unittest import mock
+        import render_qa
+        from edit_project import main
+        real = render_qa.verify_export
+        def failing(*args, **kwargs):
+            report = real(*args, **kwargs)
+            report["technical_pass"] = False
+            return report
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(render_qa, "verify_export", failing), redirect_stdout(out), redirect_stderr(err):
+            code = main(["render", str(self.project), "-o", str(self.root/"outputs"/"final.mp4")])
+        self.assertEqual(code, 4)
+        self.assertEqual(out.getvalue(), "")
+        self.assertIn("Error: Export failed technical QA", err.getvalue())
 
     def test_derived_report_and_review_images_cannot_overwrite_resources(self):
         for name in ("out.verification.json", "out.qa.json", "out.audio.json", "out.review-01.png"):

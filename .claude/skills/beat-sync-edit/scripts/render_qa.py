@@ -53,6 +53,18 @@ def guard_export_outputs(plan, video, output_dir=None, extra_protected=()):
     conflicts.update(p for p in protected if p.parent == directory and pattern.fullmatch(p.name))
     if conflicts:
         raise ValueError(f"Export/report would overwrite an input: {sorted(str(p) for p in conflicts)}")
+    # Reports are named after the output file. Never replace the reports of a
+    # different video that still exists (e.g. vertical/final.mp4 vs square/final.mp4).
+    existing = directory/f"{video.stem}.qa.json"
+    if existing.is_file():
+        try:
+            import json
+            other = json.loads(existing.read_text(encoding="utf-8")).get("path")
+        except (ValueError, OSError):
+            other = None
+        if other and Path(other).resolve() != video and Path(other).is_file():
+            raise ValueError(f"{existing} holds the QA of {other}; give this output a different file name "
+                             "so the reports of both videos are kept")
 
 
 def _allowed(start, end, ranges):

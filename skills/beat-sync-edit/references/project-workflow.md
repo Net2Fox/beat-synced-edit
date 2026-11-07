@@ -365,8 +365,12 @@ slow any shot down to that speed.
   requested moment: give that shot a source span shorter than its output length
   (`replace` with the same `clip_id` and `source_start`/`source_end`, then
   `speed` and `anchor` if needed) and check its `average_speed`.
-- While the policy is on, a `replace` without a range can also go below 1x:
-  give other replacements an explicit `source_start`/`source_end`.
+- Only the shot a revision names can become slower than 1x: the `duration`
+  target, a `speed` operation, or a `replace` with `source_start`/`source_end`.
+  A `replace` without a range, or the donor of a `duration` change, never
+  slows; `revise` refuses the change instead.
+- A photo (`kind: image`) has no motion to slow: a source range on it is
+  refused. Offer a longer hold with `duration` instead.
 - The renderer interpolates every shot whose slowest speed is below 1x with
   optical flow; an interpolation error fails the render. Interpolation needs a
   following native frame. Only a plan made with slow motion enabled leaves one

@@ -30,7 +30,9 @@ def _user_cache_dir():
         return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
     if sys.platform == "darwin":
         return Path.home() / "Library" / "Caches"
-    return Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
+    configured = os.environ.get("XDG_CACHE_HOME")
+    # The XDG spec says to ignore a relative value.
+    return Path(configured) if configured and Path(configured).is_absolute() else Path.home() / ".cache"
 
 
 def default_model_dir(project_dir):

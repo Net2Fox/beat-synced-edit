@@ -59,7 +59,7 @@ def parser():
     plan.add_argument("--audio-start", type=float)
     plan.add_argument("--allow-repeats", action="store_true")
     plan.add_argument("--shortage", choices=["extend", "error", "repeat"], default="extend")
-    plan.add_argument("--min-speed", type=float)
+    plan.add_argument("--min-speed", type=float, help="Only for a slow-motion request covering the whole edit: lets the planner slow any shot to this speed (needs --slow-motion-prompt and optical_flow)")
     plan.add_argument("--slow-motion-prompt", default="", help="Exact user request explicitly authorizing interpolated slow motion")
     plan.add_argument("--interpolation", choices=("none", "optical_flow"), default="none")
     plan.add_argument("--max-speed", type=float, default=3)
