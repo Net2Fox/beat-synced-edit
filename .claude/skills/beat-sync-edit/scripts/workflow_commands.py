@@ -27,7 +27,7 @@ def register_workflow_commands(sub):
 def render_with_qa(plan, output, preview=False, cache_dir=None, qa_dir=None, project_path=None):
     import hashlib
     import json
-    from cli_contract import tool_signature
+    from cli_guard import tool_signature
     from render_qa import file_hash
     from project_render import render_project
     from render_qa import verify_export, guard_export_outputs
@@ -108,9 +108,9 @@ def run_workflow_command(args):
             plan = read_json(project)
             validate_plan(plan)
             protected.add(project)
-            from cli_contract import fingerprint_inputs
+            from cli_guard import input_files
             from argparse import Namespace
-            protected.update(Path(p) for p in fingerprint_inputs(Namespace(project=str(project)))["files"])
+            protected.update(input_files(Namespace(project=str(project))))
             outputs.add(output)
             prepared.append((project, output, plan, bool(job.get("preview", False))))
         if outputs & protected:

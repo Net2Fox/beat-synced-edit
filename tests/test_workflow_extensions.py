@@ -1,7 +1,6 @@
-"""Exercise graphics, input-bound execution, review integrity and actual export QA."""
+"""Exercise graphics, review integrity, CLI errors and actual export QA."""
 import copy
 import io
-import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -12,11 +11,9 @@ from contextlib import redirect_stdout, redirect_stderr
 import numpy as np
 
 import _paths  # noqa: F401  (makes the skill's scripts importable)
-from project_workspace import read_json, write_json
 from graphics_commands import motion_project
 from graphics_layers import ProjectCompositor, validate_graphics
-from cli_contract import prepare_plan, execute_saved
-from edit_project import main, parser, run
+from edit_project import main
 from tracking_review import resolve_track, tracking_report
 from font_diagnostics import inspect_font
 from text_overlay import _font_path
@@ -34,38 +31,18 @@ class WorkflowTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
 
-    def test_dry_run_has_no_generated_media_then_executes_one_parsed_command(self):
-        source = self.root / "spec.json"
-        write_json(source, spec())
-        output = self.root / "project.json"
-        manifest = self.root / "execution.json"
-        argv = ["motion-project", str(source), "-o", str(output), "--dry-run", "--plan", str(manifest)]
-        result = prepare_plan(parser().parse_args(argv), argv)
-        self.assertEqual(result["execution_status"], "not_executed")
-        self.assertFalse(output.exists())
-        self.assertFalse((self.root / "motion-assets").exists())
-        execute_saved(manifest, parser(), run)
-        self.assertEqual(read_json(output)["duration_frames"], 24)
-
-    def test_execution_plan_rejects_changed_nested_source_content(self):
-        plan = motion_project(spec(), self.root / "project.json")
-        manifest = self.root / "execution.json"
-        argv = ["render", str(self.root / "project.json"), "-o", str(self.root / "out.mp4"), "--dry-run", "--plan", str(manifest)]
-        prepare_plan(parser().parse_args(argv), argv)
-        image = Path(plan["edits"][0]["source"])
-        old = image.read_bytes()
-        image.write_bytes(old[:-1] + bytes([old[-1] ^ 1]))
-        with self.assertRaisesRegex(ValueError, "input changed"):
-            execute_saved(manifest, parser(), lambda args: self.fail("Changed input must never execute"))
-
-    def test_machine_parse_error_is_valid_json(self):
-        output = io.StringIO()
-        with redirect_stdout(output), redirect_stderr(io.StringIO()):
-            code = main(["plan", "--json-brief"])
-        result = json.loads(output.getvalue())
-        self.assertEqual(code, 2)
-        self.assertFalse(result["ok"])
-        self.assertEqual(result["error"]["code"], "invalid_argument")
+    def test_cli_errors_go_to_stderr_with_documented_exit_codes(self):
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err), self.assertRaises(SystemExit) as raised:
+            main(["plan"])
+        self.assertEqual(raised.exception.code, 2)
+        self.assertEqual(out.getvalue(), "")
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = main(["inspect", str(self.root / "missing.json")])
+        self.assertEqual(code, 3)
+        self.assertEqual(out.getvalue(), "")
+        self.assertIn("Error:", err.getvalue())
 
     def test_graphic_progress_changes_measured_pixels_and_preserves_input(self):
         plan = motion_project(spec(), self.root / "project.json")

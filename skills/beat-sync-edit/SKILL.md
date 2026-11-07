@@ -65,7 +65,7 @@ finished files go (for example `outputs/`) unless the user picks another place.
 | Titles, captions, SRT/VTT files, animated cards, counters, graphic overlays | authored times or anchors | `title`, `subtitles-*`, `graphics`, `motion-project` | [text-and-graphics.md](references/text-and-graphics.md) |
 | Original sound, voice-over, music bed, sound effects, music arranged by bars | the saved timeline | `audio-config`, `arrange-music` | [audio-workflow.md](references/audio-workflow.md) |
 | Change an existing project | the saved timeline | `inspect`, `revise` | [Revise an existing project](#revise-an-existing-project) |
-| Check an export, batch jobs, dry runs, JSON output | — | `verify`, `review-export`, `batch-render` | [review-and-automation.md](references/review-and-automation.md) |
+| Check an export, record a review, render several projects | — | `verify`, `review-export`, `batch-render` | [review-and-automation.md](references/review-and-automation.md) |
 | Square white-flash montage, over-under stack, custom FFmpeg look, matching a reference video | — | `flash_montage.py`, `overunder_stack.py`, `ffmpeg` | [finishing-tools.md](references/finishing-tools.md) |
 
 Plan a music edit around its pulse or phrases and a speech edit around complete
@@ -204,6 +204,6 @@ Details: [speech-workflow.md](references/speech-workflow.md).
 - [audio-workflow.md](references/audio-workflow.md): source sound, voice,
   music and effects tracks, ducking, loudness, arranging music by bars.
 - [review-and-automation.md](references/review-and-automation.md): export QA,
-  `verify`, `review-export`, batch renders, JSON output, dry runs.
+  `verify`, `review-export`, batch renders, CLI output and exit codes.
 - [finishing-tools.md](references/finishing-tools.md): white-flash montage,
   over-under stack, custom FFmpeg looks, matching a reference video.

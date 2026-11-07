@@ -271,8 +271,8 @@ from the request (or type `/beat-sync-edit`).
 - **Tracking:** source-time path/confidence reports highlight intervals for
   inspection; manual camera keyframes correct errors. Confidence is a diagnostic,
   not recognition of a particular person or vehicle.
-- **Execution and export:** structured JSON results/errors, dry runs, input-bound
-  plans, provenance, batch analysis/render with shared caches. Export QA decodes
+- **Execution and export:** JSON results, clear errors and exit codes, overwrite
+  protection for inputs, batch render with a shared shot cache. Export QA decodes
   media, measures audio and black/silent intervals, and writes review frames.
   Intentional black/silence ranges are explicit rather than silently ignored.
 - **Testing scope:** synthetic tests establish deterministic mechanics, not

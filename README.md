@@ -27,7 +27,7 @@ new footage. The Python tools can also run directly without an agent.
 | Speed control | At least 1× playback by default. Explicitly requested slow motion uses optical-flow interpolation. |
 | Text | Animated titles, styled captions, SRT/VTT import/export and optional local speech recognition with word highlighting. |
 | Revisions | Save a project, preview it, replace or reorder shots, revise text and reuse unchanged shot caches. |
-| Export and review | H.264/AAC MP4, decode/audio/black-frame QA, contact sheets, input-bound execution plans and batch caches. |
+| Export and review | H.264/AAC MP4, decode/audio/black-frame QA, contact sheets and batch renders with a shared shot cache. |
 
 See the [complete capability guide](docs/capabilities.md) for every supported
 workflow, preset differences, examples and practical limits.

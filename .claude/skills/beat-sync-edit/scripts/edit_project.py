@@ -6,6 +6,7 @@ import contextlib
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 
 from project_workspace import read_json, review_html, revise_file, write_json
@@ -101,16 +102,11 @@ def parser():
     for register in (register_audio_commands, register_speech_commands, register_editorial_commands,
                      register_graphics_commands, register_workflow_commands):
         register(sub)
-    sub.add_parser("contract", help="Describe every command and the structured CLI protocol")
-    execute = sub.add_parser("execute-plan", help="Recheck inputs and execute a previously prepared CLI plan")
-    execute.add_argument("manifest")
-    from cli_contract import add_common_options
-    add_common_options(sub)
     return p
 
 
 def run(args):
-    from cli_contract import guard_command_outputs
+    from cli_guard import guard_command_outputs
     guard_command_outputs(args)
     from audio_commands import AUDIO_COMMANDS, run_audio_command
     from speech_commands import SPEECH_COMMANDS, run_speech_command
@@ -122,12 +118,6 @@ def run(args):
                              (WORKFLOW_COMMANDS, run_workflow_command)):
         if args.command in commands:
             return runner(args)
-    if args.command == "contract":
-        from cli_contract import contract
-        return contract(parser())
-    if args.command == "execute-plan":
-        from cli_contract import execute_saved
-        return execute_saved(args.manifest, parser(), run)
     from text_commands import TEXT_COMMANDS, run_text_command
     if args.command in TEXT_COMMANDS:
         return run_text_command(args)
@@ -220,39 +210,29 @@ def run(args):
 
 
 def main(argv=None):
-    argv = list(sys.argv[1:] if argv is None else argv)
-    structured = "--json" in argv or "--json-brief" in argv
-    brief = "--json-brief" in argv
-    # Permit machine-output flags before or after the subcommand.
-    argv = [a for a in argv if a not in ("--json", "--json-brief")] + (["--json-brief"] if brief else ["--json"] if structured else [])
-    from cli_contract import prepare_plan, envelope
-    args = None
+    """Print the command's result as JSON on stdout; errors go to stderr.
+
+    Exit codes: 2 invalid arguments or values, 3 missing or unreadable files,
+    4 a failed run or failed export QA.
+    """
+    args = parser().parse_args(argv)
     try:
-        try:
-            args = parser().parse_args(argv)
-        except SystemExit as exc:
-            if not structured or exc.code == 0:
-                raise
-            raise ValueError("Invalid command arguments; inspect the usage message on stderr") from exc
-        if args.plan_file and not args.dry_run:
-            raise ValueError("--plan is only valid with --dry-run")
+        # Progress output from libraries must not mix with the JSON result.
         with contextlib.redirect_stdout(sys.stderr):
-            result = prepare_plan(args, argv) if args.dry_run else run(args)
-        failed = (isinstance(result, dict) and (result.get("technical_pass") is False or result.get("all_succeeded") is False or result.get("verified") is False))
-        if failed:
+            result = run(args)
+        if isinstance(result, dict) and (result.get("technical_pass") is False or result.get("all_succeeded") is False
+                                         or result.get("verified") is False):
             raise RuntimeError("Validation failed: " + json.dumps(result, ensure_ascii=False, allow_nan=False))
-    except (ValueError, KeyError, TypeError, OSError, RuntimeError) as exc:
-        code, category = (3, "input_io") if isinstance(exc, OSError) else (4, "execution_failed") if isinstance(exc, RuntimeError) else (2, "invalid_argument")
-        if structured:
-            payload = envelope(getattr(args, "command", None), error={"code": category, "message": str(exc)})
-            print(json.dumps(payload, ensure_ascii=False, indent=None if brief else 2, allow_nan=False))
-        else:
-            print(f"Error: {exc}", file=sys.stderr)
+    except (ValueError, KeyError, TypeError, OSError, RuntimeError, subprocess.SubprocessError, ArithmeticError) as exc:
+        code = 3 if isinstance(exc, OSError) else 4 if isinstance(exc, (RuntimeError, subprocess.SubprocessError)) else 2
+        print(f"Error: {exc}", file=sys.stderr)
         return code
-    payload = envelope(args.command, result=result) if structured else result
-    print(json.dumps(payload, ensure_ascii=False, indent=None if brief else 2, allow_nan=False))
+    print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
     return 0
 
 
 if __name__ == "__main__":
+    # Non-ASCII paths and text must print on consoles with a legacy code page.
+    for stream in (sys.stdout, sys.stderr):
+        stream.reconfigure(encoding="utf-8", errors="backslashreplace")
     raise SystemExit(main())

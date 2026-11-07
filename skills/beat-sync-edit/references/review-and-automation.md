@@ -2,12 +2,12 @@
 
 Read this when you check an export (what `preview` and `render` already verify and
 write, `verify`, intentional black or silence), record a review with `review-export`,
-render several projects with `batch-render`, script the CLI with `--json`, `--dry-run`
-and `execute-plan`, or look up commands and flags.
+render several projects with `batch-render`, read the CLI's output and exit codes, or
+look up commands and flags.
 
 Contents: [Export QA](#export-qa) · [Review an export](#review-an-export) ·
 [Record a review](#record-a-review) · [Batch renders](#batch-renders) ·
-[Machine output and dry runs](#machine-output-and-dry-runs) · [CLI discovery](#cli-discovery)
+[CLI output and errors](#cli-output-and-errors) · [CLI discovery](#cli-discovery)
 
 ## Export QA
 
@@ -111,40 +111,17 @@ projects and outputs are checked before the first render. Shots are cached in
 after every job. The batch stops at the first failed job unless `--continue-on-error`;
 any failure gives `all_succeeded: false` and exit code 4.
 
-## Machine output and dry runs
+## CLI output and errors
 
-Every command accepts `--json`, `--json-brief`, `--dry-run` and `--plan <file>`.
-Without `--json`, stdout is the bare result JSON and an error is one `Error: <message>`
-line on stderr. `--json` (indented) or `--json-brief` (one line), before or after the
-command, wraps stdout in a `beat-sync.cli.v1` envelope:
-`{"schema", "ok": true, "command", "result", "provenance"}` or
-`{"schema", "ok": false, "command", "error": {"code", "message"}}`. Progress always goes
-to stderr. Exit codes: 0 success; 2 `invalid_argument` (bad arguments, values or JSON);
-3 `input_io` (missing or unreadable file); 4 `execution_failed` (FFmpeg or render
-failure, failed technical QA, failed batch job).
-
-```sh
-edit_project.py render <work>/project.json -o <outputs>/final.mp4 --dry-run --plan <work>/render-plan.json --json
-edit_project.py execute-plan <work>/render-plan.json --json
-```
-
-- `--dry-run` checks syntax, overwrite guards, input existence and saved-project
-  validity and hashes every input (argument files, files referenced in input JSON,
-  every file in an input folder). It decodes nothing, so it cannot predict codec, model
-  or visual problems, and writes nothing unless `--plan` names a file. `--plan` needs
-  `--dry-run`; `contract` and `execute-plan` have no dry run.
-- The plan stores the arguments, working directory, a signature of the CLI scripts and
-  Python, and the input hashes; `execute-plan` rechecks them and runs that one command
-  from the saved directory without a shell. Any change fails (prepare a new plan). A
-  plan protects reproducibility; it is not an approval.
-- Keep outputs, reports, caches and plans out of input folders: the CLI refuses an
-  output that would overwrite an input and a plan saved inside an input folder, and a
-  new file in an input folder invalidates a plan.
+Every command prints its result as JSON on stdout; progress goes to stderr. An error
+is one `Error: <message>` line on stderr with exit code 2 (bad arguments, values or
+JSON), 3 (missing or unreadable file) or 4 (FFmpeg or render failure, failed technical
+QA, failed batch job). The CLI refuses an output that would overwrite one of its
+inputs, including media named inside input JSON files, so keep outputs, reports and
+caches out of input folders.
 
 ## CLI discovery
 
 `edit_project.py --help` lists the commands, `edit_project.py CMD --help` a command's
 flags, required arguments and choices (most defaults and many meanings are only in the
 references), and `edit_project.py presets` the plan presets' settings.
-`edit_project.py contract` prints a machine-readable schema of every command (about
-120 KB, no defaults): use it only when a program needs that schema, never to look up flags.
