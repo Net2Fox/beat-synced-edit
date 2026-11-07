@@ -105,6 +105,8 @@ def parser():
     inspect.add_argument("project")
     sub.add_parser("presets", help="List the actual pace, effect and color settings")
     sub.add_parser("effects", help="List per-shot effects, grades and transitions with their value ranges")
+    doctor = sub.add_parser("doctor", help="Check Python packages, FFmpeg encoders, fonts and optional speech recognition")
+    doctor.add_argument("--strict", action="store_true", help="Also fail when optional components are missing")
     from text_commands import register_text_commands
     register_text_commands(sub)
     from audio_commands import register_audio_commands
@@ -236,6 +238,12 @@ def main(argv=None):
     Exit codes: 2 invalid arguments or values, 3 missing or unreadable files,
     4 a failed run or failed export QA.
     """
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["doctor"]:
+        # The environment check must work before NumPy/OpenCV are installed,
+        # so it bypasses the full parser and its heavy command modules.
+        from env_doctor import main as doctor_main
+        return doctor_main(argv[1:])
     args = parser().parse_args(argv)
     try:
         # Progress output from libraries must not mix with the JSON result.
