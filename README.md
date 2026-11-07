@@ -121,8 +121,11 @@ ffprobe -version
 
 `doctor` prints a JSON readiness report (Python, packages, FFmpeg encoders and
 the caption font) with a fix for each problem, and exits with 0 when every
-required component is ready and 4 otherwise. It works before the requirements
-are installed, so run it first when something fails.
+required component is ready and 4 otherwise. `warnings` lists optional items
+(speech recognition, the caption font, running outside the skill's `.venv`);
+`--strict` fails on those too. It works before the requirements are
+installed, so run it first when something fails; run with another Python, it
+prints the commands that create and fill the skill's `.venv`.
 
 `requirements.txt` resolves current compatible versions.
 `requirements.lock.txt` records the environment tested on Windows with

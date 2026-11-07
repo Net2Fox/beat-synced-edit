@@ -117,6 +117,7 @@ class ExportSafeguardTests(unittest.TestCase):
     def test_corrupt_tracking_cache_rebuilds_and_preserves_diagnostics(self):
         cache = self.root/"cache"
         first = render_project(self.plan, self.root/"a.mp4", cache_dir=cache)
+        self.assertEqual(first["cache_hits"], 0)
         tracking = next(cache.glob("*.tracking.json"))
         original = json.loads(tracking.read_text())
         original["identity_verified"] = True

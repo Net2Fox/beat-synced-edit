@@ -132,6 +132,23 @@ class SpeechProjectTests(unittest.TestCase):
         for frame in (0, 14, 15, 44, 45, 59):
             self.assertAlmostEqual(output_to_source(p, frame, "speech")["time"], 1+frame/30)
 
+    def test_bounded_broll_keeps_transitions_on_the_outer_cuts_only(self):
+        clip = {"id": "broll", "asset_id": "broll", "source": str(self.root/"broll.mp4"), "kind": "video", "start": 0, "end": 4}
+        asset = {"id": "broll", "path": clip["source"], "kind": "video", "duration": 4}
+        first, second = (e["id"] for e in self.plan["edits"])
+        insert = {"op": "speech_broll", "clip_id": "broll", "asset": asset, "clip": clip, "offset": .5, "duration": 1}
+        flash = apply_revisions(self.plan, [{"op": "transition", "after": 1, "type": "flash"},
+                                            {**insert, "shot_id": second}])
+        self.assertEqual([e["effects"].get("flash", 0) for e in flash["edits"]], [0, 1, 0, 0])
+        self.assertEqual([("transition_in" in e) for e in flash["edits"]], [False, True, False, False])
+        whip = apply_revisions(self.plan, [{"op": "transition", "after": 1, "type": "whip"},
+                                           {**insert, "shot_id": first}])
+        self.assertEqual([e["effects"].get("whip_out", 0) for e in whip["edits"]], [0, 0, 1, 0])
+        self.assertEqual(whip["edits"][3]["effects"]["whip_in"], 1)
+        self.assertEqual(whip["edits"][3]["transition_in"]["from"], whip["edits"][2]["id"])
+        cleared = apply_revisions(whip, [{"op": "transition", "after": whip["edits"][2]["id"], "type": "cut"}])
+        self.assertFalse(any(e["effects"].get("whip_in") or e["effects"].get("whip_out") for e in cleared["edits"]))
+
     def test_valid_acceleration_revision_remaps_word_cues(self):
         p = deepcopy(self.plan)
         p["edits"][0].update(source_end=5, average_speed=2)

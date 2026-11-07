@@ -394,7 +394,17 @@ def _broll_interval(plan, shot, offset=0, duration=None):
         if a == start and b == finish:
             inserted = part
         pieces.append(part)
+    # A split inside one shot is not an existing cut: only the first piece keeps
+    # the incoming transition and only the last keeps the outgoing one.
+    from project_workspace import _clear_transition_in, _clear_transition_out
+    for part in pieces[1:]:
+        _clear_transition_in(part)
+    for part in pieces[:-1]:
+        _clear_transition_out(part)
     index = plan["edits"].index(shot)
+    following = plan["edits"][index+1] if index+1 < len(plan["edits"]) else None
+    if following is not None and (following.get("transition_in") or {}).get("from") == shot["id"]:
+        following["transition_in"]["from"] = pieces[-1]["id"]
     plan["edits"][index:index+1] = pieces
     return inserted
 

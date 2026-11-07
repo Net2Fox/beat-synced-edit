@@ -118,8 +118,10 @@ output duration:
 - Per-shot, per-section or whole-project effect and transition revisions,
   including removing every effect or returning to natural colour. The
   [effects guide](../skills/beat-sync-edit/references/effects-and-looks.md)
-  maps common requests (English and Russian) to these revisions and keeps
-  full-frame flashes to three per second or fewer.
+  maps common requests (English and Russian) to these revisions.
+- At most three full-frame flashes, dips or inverts in any one second, for
+  photosensitive viewers: `plan` drops the extra ones and `revise` refuses a
+  revision that would add them; on dense cuts use whips, RGB hits or blur.
 
 Hue cycling, strobes over a time range, accents in the middle of a shot and
 looks on the finishing-tool outputs belong to a separate custom FFmpeg

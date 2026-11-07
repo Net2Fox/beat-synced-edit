@@ -20,11 +20,11 @@ import uuid
 import cv2
 import numpy as np
 
-from edit_effects import effect_value, validate_effects
+from edit_effects import active_effects, effect_value, validate_effects
 from effects_render import apply_frame_effects, zoom_amount
 from text_overlay import validate_text_tracks
 
-RENDER_VERSION = 3
+RENDER_VERSION = 4  # 4: grades computed in float32
 
 
 def _run(args):
@@ -478,6 +478,9 @@ def render_project(plan, output_path, preview=False, cache_dir=None, protected_p
                          and speed_bounds(edit, edit["duration_frames"]/fps)[0] < 1-1e-5 else "none")
         signature = {k: edit.get(k) for k in ("kind", "source_start", "source_end", "duration_frames", "effects", "speed_points", "reframe", "action_anchor")}
         signature["interpolation"] = interpolation
+        # Only values that change a frame: a 0 written for an absent effect, or
+        # "no grade" either way, must not force a re-render.
+        signature["effects"] = active_effects(edit.get("effects"))
         pulse_frames = []
         if effect_value(edit.get("effects"), "pulse"):
             # Music projects keep beats on the output timeline; picture

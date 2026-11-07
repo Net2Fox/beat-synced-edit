@@ -11,8 +11,8 @@ import numpy as np
 
 import _paths  # noqa: F401  (makes the skill's scripts importable)
 ROOT = _paths.SCRIPTS
-from edit_effects import (ACCENT_EFFECTS, EFFECTS, GRADES, catalog, parse_effect_override,
-                          transition_effects, validate_effects)
+from edit_effects import (ACCENT_EFFECTS, EFFECTS, GRADES, active_effects, catalog, flash_bursts,
+                          parse_effect_override, thin_flashes, transition_effects, validate_effects)
 from edit_presets import PRESETS
 from effects_render import apply_frame_effects, pulse_envelope, zoom_amount
 from project_workspace import apply_revisions
@@ -152,7 +152,7 @@ class RevisionTests(unittest.TestCase):
         self.assertTrue(all(e["effects"]["glitch"] == .5 for e in plan["edits"]))
         plan = apply_revisions(plan, [{"op": "effects", "shot": 2, "reset": True}])
         self.assertEqual(plan["edits"][1]["effects"], {})
-        with self.assertRaisesRegex(ValueError, "Unknown effects"):
+        with self.assertRaisesRegex(ValueError, "unknown effects"):
             apply_revisions(plan, [{"op": "effects", "all": True, "values": {"sparkle": 1}}])
         with self.assertRaisesRegex(ValueError, "non-empty"):
             apply_revisions(plan, [{"op": "effects", "all": True}])
@@ -162,7 +162,7 @@ class RevisionTests(unittest.TestCase):
         self.assertEqual(plan["edits"][0]["effects"]["whip_out"], .8)
         self.assertEqual(plan["edits"][1]["effects"]["whip_in"], .8)
         plan = apply_revisions(plan, [{"op": "transition", "after": "shot-001", "type": "flash"}])
-        self.assertEqual((plan["edits"][0]["effects"]["whip_out"], plan["edits"][1]["effects"]["whip_in"]), (0, 0))
+        self.assertEqual((plan["edits"][0]["effects"].get("whip_out", 0), plan["edits"][1]["effects"].get("whip_in", 0)), (0, 0))
         self.assertEqual(plan["edits"][1]["effects"]["flash"], 1)
         plan = apply_revisions(plan, [{"op": "transition", "all": True, "type": "glitch", "strength": .5}])
         self.assertEqual([e["effects"].get("glitch", 0) for e in plan["edits"]], [0, .5, .5])
@@ -188,6 +188,8 @@ class RevisionTests(unittest.TestCase):
         text = page.read_text(encoding="utf-8")
         for name in ("flash", "glitch", "whip_in", "whip_out", "pulse", "shake"):
             self.assertIn(f'"{name}": 0', text)
+        # Transitions go first, so a zoom transition's punch and its markers go too.
+        self.assertIn("add({op:'transition',all:true,type:'cut'});add({op:'effects'", text)
 
     def test_transition_requests_are_validated(self):
         bad = [({"op": "transition", "after": 1}, "requires type"),
@@ -201,6 +203,8 @@ class RevisionTests(unittest.TestCase):
                 apply_revisions(self.plan, [operation])
 
     def test_replacing_a_zoom_transition_restores_the_shot_zoom(self):
+        self.plan["assets"].append({"id": "v", "path": str(self.image), "kind": "video"})
+        self.plan["edits"][1].update(kind="video", asset_id="v", source_end=1.0)
         self.plan["edits"][1]["effects"]["zoom"] = 1.06
         plan = apply_revisions(self.plan, [{"op": "transition", "after": 1, "type": "zoom"}])
         self.assertAlmostEqual(plan["edits"][1]["effects"]["zoom"], 1.3)
@@ -208,6 +212,51 @@ class RevisionTests(unittest.TestCase):
             with self.subTest(kind=kind):
                 changed = apply_revisions(plan, [{"op": "transition", "after": 1, "type": kind}])
                 self.assertAlmostEqual(changed["edits"][1]["effects"]["zoom"], 1.06)
+        # A zoom the user sets after the transition is the shot's own zoom from then on.
+        explicit = apply_revisions(plan, [{"op": "effects", "shot": 2, "values": {"zoom": 1.5}}])
+        for operations in ([{"op": "transition", "after": 1, "type": "cut"}],
+                           [{"op": "transition", "after": 1, "type": "flash"}],
+                           [{"op": "reorder", "order": ["shot-002", "shot-001", "shot-003"]}]):
+            with self.subTest(operations=operations):
+                changed = apply_revisions(explicit, operations)
+                shot = next(e for e in changed["edits"] if e["id"] == "shot-002")
+                self.assertAlmostEqual(shot["effects"]["zoom"], 1.5)
+
+    def test_zoom_transition_into_a_still_only_defocuses(self):
+        plan = apply_revisions(self.plan, [{"op": "transition", "after": 1, "type": "zoom"}])
+        shot = plan["edits"][1]
+        self.assertNotIn("zoom", shot["effects"])
+        self.assertAlmostEqual(shot["effects"]["blur_in"], .4)
+        self.assertNotIn("zoom_before", shot["transition_in"])
+
+    def test_reset_removes_the_whole_transition_on_its_cuts(self):
+        plan = apply_revisions(self.plan, [{"op": "transition", "after": 1, "type": "whip", "strength": .8}])
+        incoming = apply_revisions(plan, [{"op": "effects", "shot": 2, "reset": True}])
+        self.assertEqual(incoming["edits"][0]["effects"].get("whip_out", 0), 0)
+        self.assertNotIn("transition_out", incoming["edits"][0])
+        outgoing = apply_revisions(plan, [{"op": "effects", "shot": 1, "reset": True}])
+        self.assertEqual(outgoing["edits"][1]["effects"].get("whip_in", 0), 0)
+        self.assertNotIn("transition_in", outgoing["edits"][1])
+
+    def test_transition_section_accepts_the_projects_own_sections(self):
+        for shot in self.plan["edits"]:
+            shot["section"] = "flow"
+        self.plan["sections"] = [{"name": "flow", "start_frame": 0, "end_frame": self.plan["duration_frames"]}]
+        plan = apply_revisions(self.plan, [{"op": "transition", "section": "flow", "type": "blur"}])
+        self.assertEqual([e["effects"].get("blur_in", 0) for e in plan["edits"]], [0, 1, 1])
+        with self.assertRaisesRegex(ValueError, "lead into flow"):
+            apply_revisions(self.plan, [{"op": "transition", "section": "drop", "type": "blur"}])
+
+    def test_effect_errors_name_the_shot(self):
+        from project_plan import validate_plan
+        self.plan["edits"][2]["effects"]["glitch"] = 2
+        with self.assertRaisesRegex(ValueError, "shot-003 effects: effect glitch must be between 0 and 1"):
+            validate_plan(self.plan)
+
+    def test_transitions_do_not_write_neutral_values(self):
+        plan = apply_revisions(self.plan, [{"op": "transition", "all": True, "type": "cut"}])
+        self.assertEqual([e["effects"] for e in plan["edits"]], [{"grade": "none"}] * 3)
+        self.assertEqual(active_effects({"flash": 0, "zoom": 1.0, "grade": "neutral", "glitch": .5}), {"glitch": .5})
 
     def test_reorder_keeps_only_transitions_whose_shots_stay_adjacent(self):
         plan = apply_revisions(self.plan, [{"op": "transition", "all": True, "type": "whip"}])
@@ -218,6 +267,43 @@ class RevisionTests(unittest.TestCase):
         kept = apply_revisions(self.plan, [{"op": "transition", "after": 2, "type": "whip"}])
         kept = apply_revisions(kept, [{"op": "reorder", "order": ["shot-002", "shot-003", "shot-001"]}])
         self.assertEqual((kept["edits"][0]["effects"]["whip_out"], kept["edits"][1]["effects"]["whip_in"]), (1, 1))
+
+
+class FlashRateTests(unittest.TestCase):
+    """Hard rule: at most three full-frame flashes, dips or inverts in any one second."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        image = Path(self.temp.name)/"still.png"
+        from PIL import Image
+        Image.fromarray(pattern()).save(image)
+        self.dense = minimal_plan(image, shots=8, frames=6)    # five cuts per second
+        self.loose = minimal_plan(image, shots=8, frames=12)   # two and a half per second
+
+    def test_revise_refuses_new_bursts(self):
+        for kind in ("flash", "dip", "invert"):
+            with self.subTest(kind=kind), self.assertRaisesRegex(ValueError, "photosensitive"):
+                apply_revisions(self.dense, [{"op": "transition", "all": True, "type": kind, "strength": .7}])
+        with self.assertRaisesRegex(ValueError, "photosensitive"):
+            apply_revisions(self.dense, [{"op": "effects", "all": True, "values": {"flash": .3}}])
+        apply_revisions(self.dense, [{"op": "transition", "all": True, "type": "whip"}])
+        apply_revisions(self.loose, [{"op": "transition", "all": True, "type": "flash", "strength": .7}])
+
+    def test_an_old_project_with_bursts_can_still_be_revised(self):
+        for shot in self.dense["edits"]:
+            shot["effects"]["flash"] = .5
+        self.assertTrue(flash_bursts(self.dense["edits"], 30))
+        apply_revisions(self.dense, [{"op": "effects", "all": True, "values": {"grade": "mono"}}])
+        fixed = apply_revisions(self.dense, [{"op": "effects", "all": True, "values": {"flash": 0}}])
+        self.assertEqual(flash_bursts(fixed["edits"], 30), [])
+
+    def test_thinning_keeps_three_per_second(self):
+        for shot in self.dense["edits"]:
+            shot["effects"]["flash"] = .5
+        thinned = thin_flashes(self.dense["edits"], 30)
+        self.assertEqual(thinned, ["shot-004", "shot-005"])
+        self.assertEqual(flash_bursts(self.dense["edits"], 30), [])
 
 
 class NaturalLookPlanTests(unittest.TestCase):
@@ -237,6 +323,9 @@ class NaturalLookPlanTests(unittest.TestCase):
         beatmap, library = inputs()
         plan = build_plan(beatmap, library, duration=8, preset="phonk", grade="neutral")
         self.assertTrue(all(shot["effects"]["vignette"] == .45 for shot in plan["edits"]))
+        beatmap, library = inputs()  # --effect grade=none means the same as --grade none
+        plan = build_plan(beatmap, library, duration=8, preset="phonk", effects={"grade": "none"})
+        self.assertTrue(all(not set(shot["effects"]) & {"vignette", "grain"} for shot in plan["edits"]))
 
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "FFmpeg and ffprobe required")

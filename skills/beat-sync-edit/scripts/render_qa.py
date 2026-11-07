@@ -209,6 +209,11 @@ def verify_export(video, plan=None, output_dir=None, make_sheet=True, protected_
         review.append("Inspect unexplained black intervals")
     if any(not i["intentional"] for i in silence):
         review.append("Inspect unexplained silent intervals")
+    if plan and plan.get("edits") and all("timeline_start_frame" in shot for shot in plan["edits"]):
+        from edit_effects import flash_burst_message, flash_bursts
+        bursts = flash_bursts(plan["edits"], plan["output"]["fps"])
+        if bursts:
+            review.append("The edit has " + flash_burst_message(bursts, plan["output"]["fps"]))
     report = {"schema_version": "beat-sync.verification.v1", "path": str(video), "sha256": file_hash(video),
               "technical_pass": all(c["status"] == "pass" for c in checks), "checks": checks,
               "duration": duration, "frames": frames, "fps": fps, "width": picture["width"], "height": picture["height"],

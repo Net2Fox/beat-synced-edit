@@ -10,7 +10,7 @@ from copy import deepcopy
 import math
 from pathlib import Path, PureWindowsPath
 
-from edit_effects import ACCENT_EFFECTS, NATURAL_GRADE, natural_look, validate_effects
+from edit_effects import ACCENT_EFFECTS, MAX_FLASHES_PER_SECOND, NATURAL_GRADE, natural_look, thin_flashes, validate_effects
 from edit_presets import get_preset
 from editorial_feedback import explain_candidate, excluded_by_feedback, normalize_shot_type, validate_preferences
 from music_structure import apply_overrides, segment_structure
@@ -493,11 +493,12 @@ def build_plan(beatmap, library, duration=25, preset="cinematic", fps=30,
         if name not in SECTION_NAMES:
             raise ValueError(f"Unknown section in section_stride: {name}")
         recipe["beat_stride"][name] = _integer(value, "section_stride")
+    overrides = validate_effects(config.get("effects") or {}, "effects override")
     if "grade" in config:
         recipe["effects"]["grade"] = config["grade"]
-        if config["grade"] == NATURAL_GRADE:
-            natural_look(recipe["effects"])  # explicit --effect looks below still apply
-    recipe["effects"].update(validate_effects(config.get("effects") or {}, "effects override"))
+    if NATURAL_GRADE in (config.get("grade"), overrides.get("grade")):
+        natural_look(recipe["effects"])  # explicit --effect looks below still apply
+    recipe["effects"].update(overrides)
     validate_effects(recipe["effects"], f"{preset} preset effects")
     accent_every = _integer(recipe.get("accent_every", 4), "accent_every")
     audio_path = config.get("audio_path") or beatmap.get("file") or beatmap.get("audio_file") or beatmap.get("source") or beatmap.get("path")
@@ -780,6 +781,10 @@ def build_plan(beatmap, library, duration=25, preset="cinematic", fps=30,
             else:
                 used.setdefault(clip["source"], []).append((begin, end))
             position += take_frames
+    thinned = thin_flashes(edits, fps)
+    if thinned:
+        diagnostics.append(f"Removed flash/dip/invert from {', '.join(thinned)} to keep at most "
+                           f"{MAX_FLASHES_PER_SECOND} full-frame flashes in any second.")
     plan = {"schema_version": 2, "mode": "music", "audio": {"path": audio_path, "start": audio_start, "duration": song_duration},
             "output": {"width": width, "height": height, "fps": fps}, "duration_frames": frame_count,
             "duration": actual_duration, "requested_duration": duration, "preset": preset,

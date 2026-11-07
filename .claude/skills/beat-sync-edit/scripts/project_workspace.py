@@ -135,11 +135,16 @@ _TRANSITION_FIELDS = {"op", "type", "strength", "after", "section", "all"}
 
 
 def _clear_transition_in(shot):
-    """Undo the incoming side of a transition, restoring the zoom it replaced."""
+    """Undo the incoming side of a transition: its accents, whip_in and its zoom.
+
+    Cleared values are removed rather than written as 0, so a cut that had no
+    transition keeps its cache key.
+    """
     from edit_effects import transition_effects
     marker = shot.pop("transition_in", None)
     effects = shot.setdefault("effects", {})
-    effects.update(transition_effects("cut")[1])
+    for name in transition_effects("cut")[1]:
+        effects.pop(name, None)
     if marker and "zoom_before" in marker:
         effects["zoom"] = marker["zoom_before"]
 
@@ -147,23 +152,42 @@ def _clear_transition_in(shot):
 def _clear_transition_out(shot):
     from edit_effects import transition_effects
     shot.pop("transition_out", None)
-    shot.setdefault("effects", {}).update(transition_effects("cut")[0])
+    effects = shot.setdefault("effects", {})
+    for name in transition_effects("cut")[0]:
+        effects.pop(name, None)
 
 
 def _set_transition(before, after, kind, strength):
-    from edit_effects import transition_effects
+    from edit_effects import EFFECTS, transition_effects
     outgoing, incoming = transition_effects(kind, strength)
     _clear_transition_in(after)
     _clear_transition_out(before)
     if kind == "cut":
         return
-    before["effects"].update(outgoing)
+    if after.get("kind") == "image":
+        # A photo's zoom is a slow push over the whole shot, not a punch at the
+        # cut, so a zoom transition into a still keeps only its defocus.
+        incoming.pop("zoom", None)
+    before["effects"].update({k: v for k, v in outgoing.items() if v != EFFECTS[k][3]})
     marker = {"type": kind, "from": before["id"]}
     if "zoom" in incoming:
         marker["zoom_before"] = after["effects"].get("zoom", 1.0)  # restored when the transition changes
-    after["effects"].update(incoming)
+    after["effects"].update({k: v for k, v in incoming.items() if v != EFFECTS[k][3]})
     after["transition_in"] = marker
     before["transition_out"] = {"type": kind, "to": after["id"]}
+
+
+def _clear_neighbour_transitions(edits, shot):
+    """Clear the far side of every transition on this shot's cuts (used by reset)."""
+    by_id = {item["id"]: item for item in edits}
+    marker = shot.get("transition_in")
+    neighbour = by_id.get(marker.get("from")) if marker else None
+    if neighbour is not None and (neighbour.get("transition_out") or {}).get("to") == shot["id"]:
+        _clear_transition_out(neighbour)
+    marker = shot.get("transition_out")
+    neighbour = by_id.get(marker.get("to")) if marker else None
+    if neighbour is not None and (neighbour.get("transition_in") or {}).get("from") == shot["id"]:
+        _clear_transition_in(neighbour)
 
 
 def _apply_transition(edits, operation):
@@ -186,11 +210,15 @@ def _apply_transition(edits, operation):
             raise ValueError("transition after the final shot has no following cut")
         cuts = [index]
     elif "section" in operation:
-        if operation["section"] not in SECTION_NAMES:
-            raise ValueError(f"transition section must be one of {', '.join(SECTION_NAMES)}")
+        names = list(dict.fromkeys([*SECTION_NAMES, *(shot.get("section") for shot in edits if shot.get("section"))]))
+        if operation["section"] not in names:
+            raise ValueError(f"transition section must be one of {', '.join(names)}")
         cuts = [index for index in range(len(edits) - 1) if edits[index + 1].get("section") == operation["section"]]
         if not cuts:
-            raise ValueError(f"No cuts lead into shots of section {operation['section']!r}")
+            present = sorted({shot.get("section") for shot in edits[1:] if shot.get("section")})
+            raise ValueError(f"No cuts lead into shots of section {operation['section']!r}; "
+                             f"this project's cuts lead into {', '.join(present) or 'no named sections'} "
+                             "(use after or all: true)")
     else:
         if operation["all"] is not True:
             raise ValueError("transition all must be true")
@@ -200,7 +228,7 @@ def _apply_transition(edits, operation):
 
 
 def _repair_transitions(edits):
-    """After a reorder, drop transitions whose two shots are no longer adjacent."""
+    """After any edit, drop transitions whose two shots are no longer adjacent."""
     for index, shot in enumerate(edits):
         marker = shot.get("transition_in")
         if marker and (index == 0 or edits[index - 1]["id"] != marker.get("from")):
@@ -247,6 +275,8 @@ def apply_revisions(plan, operations):
     validate_plan(result)
     edits = result["edits"]
     fps = result["output"]["fps"]
+    from edit_effects import flash_burst_message, flash_bursts
+    bursts_before = {shots for _, shots in flash_bursts(edits, fps)}
     catalog = {str(c["id"]): c for c in result.get("clips", [])}
     slowest_before = {shot["id"]: _slowest(shot, fps) for shot in edits}
     explicitly_retimed = set()
@@ -307,13 +337,21 @@ def apply_revisions(plan, operations):
                     raise ValueError("effects reset must be true or false")
                 if not isinstance(effects, dict) or (not effects and not reset):
                     raise ValueError("effects requires a non-empty values object or reset: true")
-                validate_effects(effects)
+                validate_effects(effects, "effects values")
                 from edit_effects import NATURAL_GRADE, natural_look
+                if reset:
+                    # A reset removes the whole transition on each of the shot's cuts,
+                    # not only this shot's half. Neighbours first, before any reset.
+                    for shot in selected:
+                        _clear_neighbour_transitions(edits, shot)
                 for shot in selected:
                     if reset:
                         shot["effects"] = {}
                         shot.pop("transition_in", None)
                         shot.pop("transition_out", None)
+                    if "zoom" in effects:
+                        # An explicit zoom replaces the one a zoom transition would restore.
+                        (shot.get("transition_in") or {}).pop("zoom_before", None)
                     shot.setdefault("effects", {}).update(copy.deepcopy(effects))
                     if effects.get("grade") == NATURAL_GRADE:
                         natural_look(shot["effects"], keep=effects)
@@ -362,6 +400,7 @@ def apply_revisions(plan, operations):
             else:
                 raise ValueError(f"Unknown revision operation: {kind!r}")
         _retime(result, update_sections=kind in ("duration", "reorder"))
+        _repair_transitions(result["edits"])
     for shot in edits:
         if shot["id"] not in explicitly_retimed and _slowest(shot, fps) < 1 - 1e-6 <= slowest_before.get(shot["id"], 1):
             raise ValueError(f"{shot['id']} would play at {shot['average_speed']:.2f}x. Slow motion only applies to the shot "
@@ -371,6 +410,9 @@ def apply_revisions(plan, operations):
         refresh_source_captions(result)
     refresh_anchors(result)
     validate_plan(result)
+    new_bursts = [burst for burst in flash_bursts(result["edits"], fps) if burst[1] not in bursts_before]
+    if new_bursts:
+        raise ValueError("This revision puts " + flash_burst_message(new_bursts, fps))
     result["revision"] = int(plan.get("revision", 0)) + 1
     result.setdefault("revision_log", []).append({
         "revision": result["revision"], "at": datetime.now(timezone.utc).isoformat(),
@@ -445,7 +487,7 @@ shot.onchange=()=>selectShot(true);selectShot(false);
 el('replace').onclick=()=>{if(el('replacement').value)add({op:'replace',shot:shot.value,clip_id:el('replacement').value})};
 el('duration').onclick=()=>{let seconds=Number(el('seconds').value);if(Number.isFinite(seconds)&&seconds>0)add({op:'duration',shot:shot.value,seconds});else el('status').textContent='Enter a positive duration.'};
 el('flash').onclick=()=>add({op:'effects',all:true,values:{flash:0}});
-el('accents').onclick=()=>add({op:'effects',all:true,values:ACCENTS});
+el('accents').onclick=()=>{if(data.edits.length>1)add({op:'transition',all:true,type:'cut'});add({op:'effects',all:true,values:ACCENTS})};
 const cues=[...data.titles.map(c=>({...c,track:'title'})),...data.subtitles.map(c=>({...c,track:'subtitle'}))];
 cues.forEach((c,i)=>el('textcue').add(new Option(`${c.track} · ${c.id} · ${c.text.slice(0,36)}`,String(i))));
 function selectCue(seek){let c=cues[Number(el('textcue').value)];if(!c)return;el('cuetext').value=c.text;el('cuestart').value=(c.start_frame/data.fps).toFixed(3);el('cueend').value=(c.end_frame/data.fps).toFixed(3);if(seek)player.currentTime=c.start_frame/data.fps}

@@ -16,7 +16,7 @@ GRADES = ("none", "neutral", "cinematic", "cool", "vivid", "warm",
 EFFECTS = {
     "flash": ("accent", 0, 1, 0, "White flash fading out over 80 ms from the cut"),
     "dip": ("accent", 0, 1, 0, "Fade up from black over 160 ms from the cut"),
-    "invert": ("accent", 0, 1, 0, "Negative-image hit on the first two frames"),
+    "invert": ("accent", 0, 1, 0, "Negative-image hit on the first frames (about 70 ms)"),
     "rgb_split": ("accent", 0, 1, 0, "Chromatic channel offset decaying over 200 ms"),
     "glitch": ("accent", 0, 1, 0, "Displaced horizontal slices and color offset for about 130 ms"),
     "stretch": ("accent", 0, 1, 0, "Horizontal stretch hit settling over 150 ms"),
@@ -38,6 +38,10 @@ LOOK_EFFECTS = tuple(name for name, spec in EFFECTS.items() if spec[0] == "look"
 # "neutral" is no colour grade while keeping any looks.
 NATURAL_GRADE = "none"
 EFFECT_NAMES = frozenset(EFFECTS) | {"grade"}
+# Full-frame brightness hits at a cut. More than three in one second can
+# trigger photosensitive seizures, so plans and revisions are kept below that.
+FLASH_EFFECTS = ("flash", "dip", "invert")
+MAX_FLASHES_PER_SECOND = 3
 
 # Every effect a transition may set on the incoming/outgoing side of one cut.
 _CUT_IN = ACCENT_EFFECTS + ("whip_in",)
@@ -64,21 +68,28 @@ def _number(value, name, minimum, maximum):
 
 
 def validate_effects(effects, label="effects"):
-    """Raise ValueError for unknown effects, invalid grades or out-of-range values."""
+    """Raise ValueError for unknown effects, invalid grades or out-of-range values.
+
+    Messages start with `label` (for example "shot-003 effects") so an error in
+    a long project names the shot it comes from.
+    """
     if effects is None:
         return {}
     if not isinstance(effects, dict):
         raise ValueError(f"{label} must be an object")
     unknown = set(effects) - EFFECT_NAMES
     if unknown:
-        raise ValueError(f"Unknown effects: {sorted(unknown)}; supported: {sorted(EFFECT_NAMES)}")
+        raise ValueError(f"{label}: unknown effects {sorted(unknown)}; supported: {sorted(EFFECT_NAMES)}")
     for name, value in effects.items():
         if name == "grade":
             if value not in GRADES and value is not None:
-                raise ValueError(f"Unknown grade {value!r}; choose {', '.join(GRADES)}")
+                raise ValueError(f"{label}: unknown grade {value!r}; choose {', '.join(GRADES)}")
             continue
         _, minimum, maximum, _, _ = EFFECTS[name]
-        _number(value, name, minimum, maximum)
+        try:
+            _number(value, name, minimum, maximum)
+        except ValueError as exc:
+            raise ValueError(f"{label}: {exc}") from None
     return effects
 
 
@@ -90,6 +101,51 @@ def effect_value(effects, name):
 
 def is_active(effects, name):
     return effect_value(effects, name) != EFFECTS[name][3]
+
+
+def active_effects(effects):
+    """Only the values that change a frame: neutral numbers and "no grade" are dropped."""
+    return {name: value for name, value in (effects or {}).items()
+            if (value not in (None, "none", "neutral") if name == "grade" else is_active(effects, name))}
+
+
+def _flash_starts(edits):
+    return [(shot["timeline_start_frame"], shot["id"]) for shot in edits
+            if any(is_active(shot.get("effects"), name) for name in FLASH_EFFECTS)]
+
+
+def flash_bursts(edits, fps):
+    """Each run of more than MAX_FLASHES_PER_SECOND flash/dip/invert cuts inside one second.
+
+    Returns (start frame, shot IDs) pairs, in timeline order.
+    """
+    starts, limit = _flash_starts(edits), MAX_FLASHES_PER_SECOND
+    return [(starts[i][0], tuple(shot_id for _, shot_id in starts[i:i + limit + 1]))
+            for i in range(len(starts) - limit) if starts[i + limit][0] - starts[i][0] < fps]
+
+
+def thin_flashes(edits, fps):
+    """Zero flash/dip/invert on every shot that would be the fourth inside one second."""
+    kept, thinned = [], []
+    for shot in edits:
+        effects = shot.get("effects") or {}
+        if not any(is_active(effects, name) for name in FLASH_EFFECTS):
+            continue
+        start = shot["timeline_start_frame"]
+        if sum(start - frame < fps for frame in kept) >= MAX_FLASHES_PER_SECOND:
+            for name in FLASH_EFFECTS:
+                effects.pop(name, None)
+            thinned.append(shot["id"])
+        else:
+            kept.append(start)
+    return thinned
+
+
+def flash_burst_message(bursts, fps):
+    start, shots = bursts[0]
+    return (f"more than {MAX_FLASHES_PER_SECOND} full-frame flashes, dips or inverts within one second "
+            f"(shots {', '.join(shots)} from {start / fps:.2f} s); rapid flashing can trigger photosensitive "
+            "seizures. On dense cuts use whip, rgb or blur, or put flashes on fewer cuts")
 
 
 def parse_effect_override(text):
@@ -155,5 +211,6 @@ def catalog():
             "The planner keeps accent effects only on accent cuts; use revise effects/transition to place them elsewhere.",
             "pulse uses the project's measured beat_frames; it has no effect without beats.",
             "grade none removes the colour grade and every look (vignette, grain, glow, letterbox); neutral keeps the looks.",
+            "At most three flash, dip or invert cuts fit in one second: plan drops the extra ones, revise refuses them.",
         ],
     }

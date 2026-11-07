@@ -24,8 +24,9 @@ ffprobe -version
 
 On Windows use `python -m venv <skill>/.venv`. FFmpeg and ffprobe must be on
 PATH. `edit_project.py doctor` checks Python, the packages, FFmpeg encoders
-and the caption font, and says how to fix what is missing; run it after setup
-and whenever a command fails on a missing dependency. Speech recognition is optional: install it only when there is speech to
+and the caption font, and says how to fix what is missing; run it with
+`<python>` after setup and whenever a command fails on a missing dependency.
+Its `problems` must be empty; `warnings` are optional items. Speech recognition is optional: install it only when there is speech to
 transcribe and no transcript was supplied, with
 `<python> -m pip install -r <skill>/requirements-transcription.txt`. Its first
 run downloads the model once into a cache shared by all projects.
@@ -94,8 +95,9 @@ thoughts; never substitute one for the other.
    `anime` and `travel`. Every preset colour-grades every shot and adds zoom
    and accents on accent cuts; `phonk`, `anime` and `travel` also add looks
    (vignette, grain or glow). `--grade none` removes the colour grade and the
-   looks; keep it unless the user asked for a look, and remove accents with an
-   `effects` revision if asked. Map pacing and look requests to flags with the
+   looks; keep it unless the user asked for a look or named a style preset
+   (that is asking for its look), and remove accents with an `effects`
+   revision if asked. Map pacing and look requests to flags with the
    table in [project-workflow.md](references/project-workflow.md), and effect
    requests to revisions with [effects-and-looks.md](references/effects-and-looks.md).
 5. Preview: `edit_project.py preview <work>/project.json -o <work>/preview.mp4`.
@@ -197,9 +199,10 @@ Details: [speech-workflow.md](references/speech-workflow.md).
    contrast, pacing, effects); ask when it is unclear. Method in
    [finishing-tools.md](references/finishing-tools.md).
 6. **No promises.** Do not promise virality or platform performance.
-7. **Flashing.** Never put more than three full-frame flashes or inverts in
-   any one second: rapid bright flashing can trigger photosensitive seizures.
-   For dense cuts use `dip`, `whip` or `rgb` transitions instead.
+7. **Flashing.** Never put more than three full-frame flashes, dips or
+   inverts in any one second: rapid flashing can trigger photosensitive
+   seizures. `plan` drops extra ones and `revise` refuses them; on dense cuts
+   use `whip`, `rgb` or `blur` transitions instead.
 
 ## References
 

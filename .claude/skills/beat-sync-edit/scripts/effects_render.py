@@ -86,10 +86,10 @@ def _grade(arr, grade):
     elif grade == "cool":
         arr *= np.array([1.08, 1.01, .97], np.float32)
     elif grade == "vivid":
-        gray = np.sum(arr * np.array([.114, .587, .299]), axis=2, keepdims=True)
+        gray = np.sum(arr * _LUMA, axis=2, keepdims=True)
         arr = (gray + (arr-gray)*1.22 - .5)*1.07 + .5
     elif grade == "cinematic":
-        gray = np.sum(arr * np.array([.114, .587, .299]), axis=2, keepdims=True)
+        gray = np.sum(arr * _LUMA, axis=2, keepdims=True)
         arr = (gray + (arr-gray)*.86 - .5)*1.12 + .51
         arr[..., 0] += .025*(1-arr[..., 0])
         arr[..., 2] += .02*arr[..., 2]

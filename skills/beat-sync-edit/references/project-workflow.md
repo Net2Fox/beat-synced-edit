@@ -119,7 +119,7 @@ only on accent shots.
 |---|---|
 | natural colour, or names no look | `--grade none` (also removes the preset's looks) |
 | a colour look | `--grade cinematic`, `cool`, `warm`, `vivid`, `mono`, `teal_orange`, `vintage` or `moody` |
-| a style such as phonk, anime/AMV or a travel vlog | `--preset phonk`, `anime` or `travel` (each brings its looks unless `--grade none`) |
+| a style such as phonk, anime/AMV or a travel vlog | `--preset phonk`, `anime` or `travel` without `--grade none`: naming the style asks for its grade and looks |
 | flashes, glitch, whips, shake, film grain, bars, other effects | revisions `effects` / `transition`: [effects-and-looks.md](effects-and-looks.md) |
 | punchier, more cuts in the drop | `--section-stride drop=1` with a lower `--min-shot`, or the `car`/`gaming` preset |
 | calmer | a larger `--section-stride NAME=N` for the busy sections, a higher `--min-shot`, the `cinematic`/`product` preset, or `--pacing-mode phrase_flow` |
@@ -178,7 +178,7 @@ edit_project.py preview <work>/project.json -o <work>/preview.mp4
 This renders a smaller, fast-encoded video and `<work>/preview.html` (`--html`
 sets another path), an offline review page with a player, shot buttons, a
 replacement-clip picker, a duration field, buttons that remove all flashes or
-all accent effects (flashes, glitches, whips, pulses, shake) and a
+all transitions and accent effects (flashes, glitches, whips, pulses, shake) and a
 title/caption editor; show the user either one. The page only queues
 operations and downloads `revisions.json`; apply that file with `revise`.
 Preview runs the same export QA as render
@@ -224,7 +224,7 @@ such as `shot-003`; prefer IDs, because positions change after `reorder`.
 | `replace` | `shot`, `clip_id`; optional `source_start`, `source_end` (source seconds inside the clip) | New picture, same output length. Without a range it takes the first unused range long enough for 1x; with only `source_start` it plays at 1x from there if the clip is long enough. Resets the shot's speed curve, action anchor and reframe (`auto` with the clip's annotated subject). |
 | `reorder` | `order`: every shot ID exactly once | New shot order. |
 | `duration` | `shot`, `seconds`; optional `borrow_from` (a shot) | Sets one shot's length and takes the difference from the next shot (the previous one for the last shot) or from `borrow_from`; the total stays exact. Source ranges stay, so both shots change speed. |
-| `effects` | selector, `values` (any effect or `grade` from `edit_project.py effects`), optional `reset: true` | Merges into each selected shot's effects; `reset` clears them first; `"grade": "none"` also removes looks: [effects-and-looks.md](effects-and-looks.md). |
+| `effects` | selector, `values` (any effect or `grade` from `edit_project.py effects`), optional `reset: true` | Merges into each selected shot's effects; `reset` clears them and the transitions on the shot's cuts first; `"grade": "none"` also removes looks: [effects-and-looks.md](effects-and-looks.md). |
 | `transition` | `type`, optional `strength`, and one of `after`, `section`, `all: true` | Sets or clears the transition of those cuts: [effects-and-looks.md](effects-and-looks.md#transitions). |
 | `reframe` | selector, `mode`, `subject`, `subject_start`, `keyframes`, `sample_fps`, `confidence_threshold` | [Tracking and reframing](#tracking-and-reframing) |
 | `speed` | selector, `points`, optional `anchor` | [Speed ramps](#speed-ramps) |
