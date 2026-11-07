@@ -139,6 +139,20 @@ class PixelTests(unittest.TestCase):
         self.assertEqual(zoom_amount(effects, "video", 10, 30, 30, ()), 1, "no beats, no pulse")
 
 
+class WhipTests(unittest.TestCase):
+    def test_whip_slides_with_wrapped_edges_not_a_mirror(self):
+        from effects_render import _motion_blur, _shift_horizontal
+        ramp = np.tile(np.arange(64, dtype=np.uint8)[None, :, None] * 4, (8, 1, 3))
+        np.testing.assert_array_equal(_shift_horizontal(ramp, 20), np.roll(ramp, 20, axis=1))
+        blurred = _motion_blur(ramp, 9)
+        self.assertEqual(blurred.shape, ramp.shape)
+        # Wrapping blends the far edge in: the first column mixes in the last ones.
+        self.assertGreater(int(blurred[0, 0, 0]), int(ramp[0, 0, 0]) + 20)
+        self.assertIs(_motion_blur(ramp, 1), ramp)
+        whip = apply_frame_effects(pattern(), {"whip_in": 1.0}, 0, 12, 30)
+        self.assertEqual(whip.shape, pattern().shape)
+
+
 class RevisionTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

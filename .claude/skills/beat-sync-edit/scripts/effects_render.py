@@ -45,17 +45,24 @@ def zoom_amount(effects, kind, index, count, fps, pulse_frames=()):
 
 
 def _shift_horizontal(frame, dx):
+    """Slide the frame sideways, wrapping what leaves one edge in at the other.
+
+    A whip shifts up to half the width; a reflected border would show a
+    mirror image of the frame there, which reads as a kaleidoscope, not a pan.
+    """
     if not dx:
         return frame
     matrix = np.float32([[1, 0, dx], [0, 1, 0]])
-    return cv2.warpAffine(frame, matrix, (frame.shape[1], frame.shape[0]), borderMode=cv2.BORDER_REFLECT)
+    return cv2.warpAffine(frame, matrix, (frame.shape[1], frame.shape[0]), borderMode=cv2.BORDER_WRAP)
 
 
 def _motion_blur(frame, length):
-    length = int(length)
+    """Horizontal blur that wraps around the edges, matching _shift_horizontal."""
+    length = min(int(length), frame.shape[1])
     if length < 2:
         return frame
-    return cv2.blur(frame, (length, 1), borderType=cv2.BORDER_REFLECT)
+    padded = np.concatenate([frame[:, -length:], frame, frame[:, :length]], axis=1)
+    return np.ascontiguousarray(cv2.blur(padded, (length, 1))[:, length:length + frame.shape[1]])
 
 
 def _stretch(frame, amount):

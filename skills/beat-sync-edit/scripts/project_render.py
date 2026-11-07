@@ -24,7 +24,7 @@ from edit_effects import active_effects, effect_value, validate_effects
 from effects_render import apply_frame_effects, zoom_amount
 from text_overlay import validate_text_tracks
 
-RENDER_VERSION = 4  # 4: grades computed in float32
+RENDER_VERSION = 5  # 4: grades computed in float32; 5: whips wrap instead of mirroring
 
 
 def _run(args):
