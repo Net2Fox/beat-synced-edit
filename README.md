@@ -22,7 +22,7 @@ new footage. The Python tools can also run directly without an agent.
 | Mixed media | Combines videos and still images from files, folders or ZIP archives. |
 | Content-aware selection | Reviewed annotations, explained scores, alternatives, query/preferences and persistent accept/reject feedback. |
 | Framing | Vertical, square or horizontal output; tracking diagnostics, manual camera keyframes, fixed crops and letterboxing. |
-| Graphic compositions | Reusable styles/safe areas, local editable cards/counters/overlays, and an optional Remotion composition adapter. |
+| Graphic compositions | Reusable styles/safe areas and local editable cards, counters and overlays, rendered to a reusable MP4. |
 | Looks and accents | Four editable presets, color grades, punch-ins, flashes, shake and photo motion. |
 | Speed control | At least 1× playback by default. Explicitly requested slow motion uses optical-flow interpolation. |
 | Text | Animated titles, styled captions, SRT/VTT import/export and optional local speech recognition with word highlighting. |

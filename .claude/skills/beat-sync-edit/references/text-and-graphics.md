@@ -2,12 +2,12 @@
 
 Read this for titles, burned-in captions, SRT/VTT files, captions from local
 speech recognition, text and project styles, graphic cards, counters, bars and
-overlays, motion-graphics-only videos, Remotion export, and semantic anchors
+overlays, motion-graphics-only videos, and semantic anchors
 that tie text, graphics or sounds to a moment of a saved `<work>/project.json`.
 
 Contents: [Basics](#basics) · [Titles](#titles) · [Caption files](#caption-files) · [Local speech recognition](#local-speech-recognition) ·
 [Text styles](#text-styles) · [Project style presets](#project-style-presets) · [Fonts](#fonts) · [Revise text](#revise-text) ·
-[Graphic layers](#graphic-layers) · [Motion-only projects](#motion-only-projects) · [Optional Remotion export](#optional-remotion-export) ·
+[Graphic layers](#graphic-layers) · [Motion-only projects](#motion-only-projects) ·
 [Semantic anchors](#semantic-anchors)
 
 ## Basics
@@ -275,35 +275,6 @@ and `subtitles` (cues with `id`, `text`, `start_frame`, `end_frame`); `audio`
 ([audio-workflow.md](audio-workflow.md)); `qa`. Without audio the result is
 silent with the silence marked intentional. The background image goes to
 `motion-assets/` beside the project.
-
-## Optional Remotion export
-
-`remotion-export` turns the same composition JSON into a new, editable Remotion
-(React) project (`index.jsx`, `composition.json`, `render.mjs`, pinned
-`package.json`) and needs Node. It does not accept a user's Remotion project,
-and the native renderer covers everything it does: use it only when the user
-wants editable React source or Remotion Studio.
-
-```sh
-edit_project.py remotion-export <work>/composition.json --work <work>/remotion
-npm --prefix <work>/remotion install
-edit_project.py remotion-export <work>/composition.json --work <work>/remotion --render <work>/motion.mp4
-```
-
-- Only `card`, `rectangle`, `counter` and `bar` layers; titles, subtitles,
-  audio, image/video layers and per-layer `font` are refused. Set `style.font`
-  (else Arial/sans-serif). It looks different from the native renderer (bold,
-  rounded corners, other motion, `#172435` default background).
-- Remotion may download a browser; the `BEAT_SYNC_BROWSER` environment variable
-  can name an installed one. Rendering with
-  `npm --prefix <work>/remotion run render -- <work>/motion.mp4` and opening
-  Remotion Studio with `npm --prefix <work>/remotion run studio` also work.
-- `--render` checks only size and decoded frame count (`visual_review:
-  not_reviewed`): open its frames. Use the silent MP4 as a `video` graphic
-  layer or analyze it as footage.
-- Re-export refuses to overwrite files edited since the last export: use a new
-  `--work` folder. Remotion's licence applies
-  ([documentation](https://www.remotion.dev/docs/renderer/render-media)).
 
 ## Semantic anchors
 

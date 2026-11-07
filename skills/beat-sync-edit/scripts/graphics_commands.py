@@ -9,7 +9,7 @@ from graphics_layers import STYLES, apply_style, validate_graphics
 from project_workspace import read_json, write_json, revise_file
 
 GRAPHICS_OPERATIONS = {"style", "graphics_set", "graphics_remove", "qa_policy"}
-GRAPHICS_COMMANDS = {"style", "graphics", "graphics-remove", "graphic-template", "motion-project", "tracking-report", "reframe-keyframes", "font-check", "remotion-export"}
+GRAPHICS_COMMANDS = {"style", "graphics", "graphics-remove", "graphic-template", "motion-project", "tracking-report", "reframe-keyframes", "font-check"}
 
 
 def apply_graphics_operation(plan, operation):
@@ -67,10 +67,6 @@ def register_graphics_commands(sub):
     reframe.add_argument("-o", "--output")
     font = sub.add_parser("font-check", help="Check actual font character coverage for a project")
     font.add_argument("project")
-    remotion = sub.add_parser("remotion-export", help="Export an editable local React graphics composition; optionally render with installed Remotion")
-    remotion.add_argument("spec")
-    remotion.add_argument("--work", required=True)
-    remotion.add_argument("--render", help="Render path using locally installed Node dependencies")
 
 
 def motion_project(spec, destination):
@@ -131,9 +127,6 @@ def run_graphics_command(args):
     if args.command == "motion-project":
         plan = motion_project(read_json(args.spec), args.output)
         return {"project": str(Path(args.output).resolve()), "frames": plan["duration_frames"], "mode": "motion"}
-    if args.command == "remotion-export":
-        from remotion_adapter import export_composition
-        return export_composition(read_json(args.spec), args.work, args.render)
     plan = read_json(args.project)
     if args.command == "font-check":
         from font_diagnostics import inspect_project_fonts

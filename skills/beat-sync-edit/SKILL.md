@@ -200,7 +200,7 @@ Details: [speech-workflow.md](references/speech-workflow.md).
   selection, speech planning, corrections and translations, B-roll, gaps.
 - [text-and-graphics.md](references/text-and-graphics.md): titles, captions,
   speech recognition, text and project styles, graphics and motion cards,
-  Remotion export, semantic anchors.
+  semantic anchors.
 - [audio-workflow.md](references/audio-workflow.md): source sound, voice,
   music and effects tracks, ducking, loudness, arranging music by bars.
 - [review-and-automation.md](references/review-and-automation.md): export QA,

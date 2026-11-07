@@ -94,17 +94,6 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(inspect_font(font, "Hello Привет 123")["status"], "pass")
         self.assertEqual(inspect_font(font, chr(0x10ffff))["status"], "fail")
 
-    def test_remotion_exports_editable_source_and_protects_edits(self):
-        from remotion_adapter import export_composition
-        folder = self.root / "react"
-        result = export_composition(spec(), folder)
-        self.assertFalse(result["rendered"])
-        source = Path(result["source"])
-        self.assertIn("useCurrentFrame", source.read_text(encoding="utf-8"))
-        source.write_text("// My edited composition", encoding="utf-8")
-        with self.assertRaisesRegex(ValueError, "Preserve edited"):
-            export_composition(spec(), folder)
-
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "FFmpeg tools required")
 class ActualExportTests(unittest.TestCase):

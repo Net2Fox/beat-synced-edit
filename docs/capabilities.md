@@ -266,9 +266,8 @@ from the request (or type `/beat-sync-edit`).
   virality claim.
 - **Graphics:** reusable styles, safe text zones and character-coverage
   diagnostics; local animated cards, counters, progress bars and image/text
-  layers. A motion specification can render a reusable MP4. The optional
-  Remotion adapter exports editable React and uses locally installed dependencies
-  when rendering is requested; no cloud media generation is included.
+  layers. A motion specification can render a reusable MP4; no cloud media
+  generation is included.
 - **Tracking:** source-time path/confidence reports highlight intervals for
   inspection; manual camera keyframes correct errors. Confidence is a diagnostic,
   not recognition of a particular person or vehicle.
