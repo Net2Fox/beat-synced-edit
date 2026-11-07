@@ -348,15 +348,17 @@ output length):
  {"op": "replace", "shot": "shot-009", "clip_id": "<that shot's clip_id>", "source_start": 3.5, "source_end": 3.75}]
 ```
 
-`plan --slow-motion-prompt ... --interpolation optical_flow` also exists, but
-then the planner's shortage handling and ramps may slow every shot (for
-example 0.88x across the whole edit). Do not use it for a single requested
-moment.
+`plan --slow-motion-prompt "<their words>" --interpolation optical_flow`
+records the same permission at planning time but still plans every shot at 1x
+or faster. Only when the user asked for slow motion across the whole edit, add
+`--min-speed` (for example `0.5`): then shortage handling and speed ramps may
+slow any shot down to that speed.
 
 - The project records `policies.allow_slow_motion`, the exact quote in
   `policies.slow_motion_prompt`, `policies.interpolation: "optical_flow"` and
   `policies.min_speed`, which defaults to 0.5 once enabled (`plan` accepts
-  0.01 to 1); set it to match the request. A prompt without `optical_flow`, or
+  0.01 to 1; passing it to `plan` also lets the planner slow any shot, so do
+  that only for a whole-edit request). A prompt without `optical_flow`, or
   slowdown without a recorded prompt, fails validation in `plan`, `revise` and
   `render`.
 - The quote authorizes; it does not choose shots or speeds. Slow only the

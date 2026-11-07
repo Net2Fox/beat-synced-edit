@@ -430,8 +430,12 @@ def build_plan(beatmap, library, duration=25, preset="cinematic", fps=30,
     interpolation), max_speed (default 4), tags (preferred semantic labels),
     exclude (clip IDs), reframe ('auto', 'center', 'manual'), subject (normalized
     bbox), grade, effects, beat_stride (integer or per-section mapping).
-    'extend' may use slower unused intervals only with that explicit permission;
-    it never freezes/repeats video secretly. Still images can be held longer.
+    An authorized prompt alone only records permission (policy min_speed .5) for
+    a later revision that slows the requested shot; the planner's own choices
+    (shortage handling, ramps) stay at 1x or faster. Only an explicit min_speed
+    below 1, for a request covering the whole edit, lets the planner slow
+    footage. It never freezes/repeats video secretly; still images can be held
+    longer.
     """
     fps = _integer(fps, "fps")
     if fps > 120:
@@ -463,10 +467,16 @@ def build_plan(beatmap, library, duration=25, preset="cinematic", fps=30,
     slow_policy = {"allow_slow_motion": bool(prompt), "slow_motion_prompt": prompt,
                    "interpolation": config.get("interpolation", "none")}
     authorized = _slow_motion_authorized(slow_policy)
-    min_speed = config.get("min_speed")
-    min_speed = _number(min_speed if min_speed is not None else (.5 if authorized else 1), "min_speed", .01, 1)
+    explicit_min_speed = config.get("min_speed")
+    min_speed = _number(explicit_min_speed if explicit_min_speed is not None else (.5 if authorized else 1), "min_speed", .01, 1)
     if min_speed < 1 and not authorized:
         raise ValueError("min_speed below 1 requires an explicit slow_motion_prompt and optical_flow interpolation")
+    # The policy records what revisions may use. Without an explicit min_speed
+    # the planner's own decisions (shortage extension, ramps) stay at 1x or
+    # faster, so a request about one moment never slows the rest of the edit.
+    policy_min_speed = min_speed
+    if explicit_min_speed is None:
+        min_speed = 1.0
     max_speed = _number(config.get("max_speed", 4), "max_speed", 1)
     if "beat_stride" in config:
         stride = config["beat_stride"]
@@ -768,7 +778,7 @@ def build_plan(beatmap, library, duration=25, preset="cinematic", fps=30,
             "clips": clips, "edits": edits, "diagnostics": diagnostics, "music_structure": structure,
             "editorial": {"query": query, "preferences": deepcopy(preferences)},
             "policies": {"allow_repeats": allow_repeats, "shortage": shortage,
-                         "min_speed": min_speed, "max_speed": max_speed, **slow_policy}}
+                         "min_speed": policy_min_speed, "max_speed": max_speed, **slow_policy}}
     validate_plan(plan)
     return plan
 
