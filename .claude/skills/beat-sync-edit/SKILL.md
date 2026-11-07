@@ -52,9 +52,10 @@ finished files go (for example `outputs/`) unless the user picks another place.
 | `<work>/annotations.json` | your visual observations about clips |
 | `<work>/beats.json` | `music` output: tempo, beats, energy, beat confidence, phrase and event hypotheses |
 | `<work>/project.json` | the editing project, with `.history/` snapshots and a `cache/` of rendered shots |
-| `<work>/preview.mp4`, `.html` | fast review render and offline review page, with the same QA files as the final |
+| `<work>/preview.mp4`, `.html` | fast review render and offline review page |
 | `<work>/numba-cache/` | music-analysis cache; safe to delete |
-| `<outputs>/final.mp4` | delivery, written with `final.qa.json`, `final.review-NN.png`, `final.verification.json` and `final.audio.json` beside it |
+| `<work>/reports/` | QA of every preview and render: `final.qa.json`, `final.review-NN.png`, `final.verification.json`, `final.audio.json` (and `preview.*`) |
+| `<outputs>/final.mp4` | the delivered video only |
 
 ## Choose the workflow
 
@@ -143,9 +144,9 @@ Details: [speech-workflow.md](references/speech-workflow.md).
 ## Review and deliver
 
 - `preview` and `render` run export QA themselves and fail when a technical
-  check fails. Their printed result is long, so review from the report written
-  beside the video, `<outputs>/final.qa.json` (`<work>/preview.qa.json` for a
-  preview): open every PNG in its `contact_sheets` (cuts and caption/graphic
+  check fails. Their printed result is long, so review from the report in
+  `<work>/reports/`, `final.qa.json` (`preview.qa.json` for a preview): open
+  every PNG in its `contact_sheets` (cuts and caption/graphic
   midpoints), read `review_notes`, and check `black_intervals` and
   `silent_intervals`. Mark intended ones with the `qa_policy` revision
   ([review-and-automation.md](references/review-and-automation.md)), then

@@ -13,8 +13,8 @@ Contents: [Export QA](#export-qa) · [Review an export](#review-an-export) ·
 
 `preview` and `render` run export QA on the encoded MP4 themselves and exit with code 4
 when a technical check fails, leaving the MP4 and its reports on disk; never deliver
-that file. Reports are named after the output and written beside it (`<outputs>` for a
-render, `<work>` for a preview):
+that file. Reports are named after the output and written to `reports/` in the
+project's folder (`<work>/reports/`), so the delivery folder holds only the video:
 
 | File | Contents |
 |---|---|
@@ -33,7 +33,7 @@ unexplained ones add one `review_notes` line per kind, as do a true peak at or a
 
 ## Review an export
 
-Read these from `<name>.qa.json` beside the video (`qa.report`); the printed result is
+Read these from `<work>/reports/<name>.qa.json` (`qa.report`); the printed result is
 long and puts `qa` last.
 
 1. Open every PNG in `contact_sheets`. Tiles, labelled in output seconds, show the
@@ -76,7 +76,7 @@ sheets then sample seven evenly spaced times instead of cuts).
 review that really happened (the report-only-what-you-observed rule in SKILL.md).
 
 ```sh
-edit_project.py review-export <outputs>/final.qa.json --observations <work>/review.json
+edit_project.py review-export <work>/reports/final.qa.json --observations <work>/review.json
 ```
 
 ```json
@@ -106,7 +106,7 @@ edit_project.py batch-render <work>/jobs.json --work <work>/batch
 A job accepts only `project`, `output` (a distinct `.mp4`) and `preview` (default
 `false`; preview size, no HTML page); relative paths resolve beside the manifest. All
 projects and outputs are checked before the first render. Shots are cached in
-`<work>/batch/cache`; each job runs export QA with reports beside its output;
+`<work>/batch/cache`; each job runs export QA with reports in `<work>/batch/reports`;
 `<work>/batch/batch-report.json` (each job's `ok` and `result` or `error`) is rewritten
 after every job. The batch stops at the first failed job unless `--continue-on-error`;
 any failure gives `all_succeeded: false` and exit code 4.

@@ -38,7 +38,7 @@ def render_with_qa(plan, output, preview=False, cache_dir=None, qa_dir=None, pro
     refresh_anchors(plan)
     protected = [project_path] if project_path else []
     guard_export_outputs(plan, output, qa_dir, protected)
-    result = render_project(plan, output, preview=preview, cache_dir=cache_dir, protected_paths=protected)
+    result = render_project(plan, output, preview=preview, cache_dir=cache_dir, protected_paths=protected, report_dir=qa_dir)
     result["provenance"] = {"tool": tool_signature(),
                             "project_sha256": hashlib.sha256(json.dumps(plan, sort_keys=True, ensure_ascii=False, allow_nan=False).encode()).hexdigest(),
                             "output_sha256": file_hash(output)}
@@ -46,7 +46,9 @@ def render_with_qa(plan, output, preview=False, cache_dir=None, qa_dir=None, pro
     expected["output"].update(width=result["width"], height=result["height"])
     qa = verify_export(output, expected, output_dir=qa_dir, protected_paths=protected)
     result["qa"] = {k: qa[k] for k in ("technical_pass", "report", "contact_sheets", "review_notes", "visual_review", "playback_review")}
-    write_json(Path(output).with_suffix(".verification.json"), result)
+    reports = Path(qa_dir).resolve() if qa_dir else Path(output).resolve().parent
+    result["verification"] = str(reports / f"{Path(output).stem}.verification.json")
+    write_json(result["verification"], result)
     if not qa["technical_pass"]:
         raise RuntimeError(f"Export failed technical QA; inspect {qa['report']}")
     return result
@@ -123,7 +125,7 @@ def run_workflow_command(args):
         results = []
         for project, output, plan, preview in prepared:
             try:
-                result = render_with_qa(plan, str(output), preview, str(work / "cache"), project_path=project)
+                result = render_with_qa(plan, str(output), preview, str(work / "cache"), qa_dir=str(work / "reports"), project_path=project)
                 results.append({"project": str(project), "ok": True, "result": result})
             except (ValueError, OSError, RuntimeError) as exc:
                 results.append({"project": str(project), "ok": False, "error": str(exc)})

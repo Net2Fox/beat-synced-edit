@@ -26,6 +26,17 @@ class ExportSafeguardTests(unittest.TestCase):
         self.project = self.root/"project.json"
         self.plan = motion_project(composition(), self.project)
 
+    def test_render_cli_keeps_reports_out_of_the_delivery_folder(self):
+        from edit_project import parser, run
+        outputs = self.root/"outputs"
+        result = run(parser().parse_args(["render", str(self.project), "-o", str(outputs/"final.mp4")]))
+        self.assertEqual(sorted(p.name for p in outputs.iterdir()), ["final.mp4"])
+        reports = self.root/"reports"
+        self.assertEqual(Path(result["verification"]), reports/"final.verification.json")
+        self.assertEqual(Path(result["qa"]["report"]), reports/"final.qa.json")
+        for name in ("final.verification.json", "final.qa.json", "final.audio.json", "final.review-01.png"):
+            self.assertTrue((reports/name).is_file(), name)
+
     def test_derived_report_and_review_images_cannot_overwrite_resources(self):
         for name in ("out.verification.json", "out.qa.json", "out.audio.json", "out.review-01.png"):
             with self.subTest(name=name):

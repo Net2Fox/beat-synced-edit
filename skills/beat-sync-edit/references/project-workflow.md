@@ -386,7 +386,8 @@ edit_project.py render <work>/project.json -o <outputs>/final.mp4
 The output is an H.264 (yuv420p, square pixels) and AAC MP4 at the project's
 size and frame rate; cached shots in `<work>/cache` are reused (`--cache` sets
 another folder). Render runs export QA, writes `final.verification.json`,
-`final.qa.json`, `final.audio.json` and `final.review-NN.png` beside the MP4 and
+`final.qa.json`, `final.audio.json` and `final.review-NN.png` to `<work>/reports/`
+(the output folder receives only the MP4) and
 fails when a technical check fails
 ([review-and-automation.md](review-and-automation.md)). Keep preview and final
 paths distinct. Read the project's `diagnostics`, and report tracking or speed

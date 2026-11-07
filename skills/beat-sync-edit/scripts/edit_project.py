@@ -188,11 +188,14 @@ def run(args):
         refresh_anchors(plan)
         validate_plan(plan)
         cache = str(Path(args.cache).resolve() if args.cache else project.parent / "cache")
-        result = render_with_qa(plan, str(Path(args.output).resolve()), preview=args.command == "preview", cache_dir=cache, project_path=project)
+        # Reports stay with the project; the output folder receives only the video.
+        reports = project.parent / "reports"
+        result = render_with_qa(plan, str(Path(args.output).resolve()), preview=args.command == "preview", cache_dir=cache,
+                                qa_dir=str(reports), project_path=project)
         if args.command == "preview":
             page = args.html or str(Path(args.output).with_suffix(".html"))
             result["review_page"] = review_html(plan, args.output, page)
-        write_json(str(Path(args.output).with_suffix(".verification.json")), result)
+            write_json(result["verification"], result)
         return result
     if args.command == "revise":
         result = revise_file(args.project, read_json(args.operations), args.output)

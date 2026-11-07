@@ -111,8 +111,12 @@ def main():
                                        "seconds": (revised["edits"][index]["duration_frames"] + 1) / 30}]), encoding="utf-8")
     cli("revise", project, "--operations", revisions)
     cli("inspect", project)
-    cli("render", project, "-o", work / "final.mp4")
-    verified = json.loads((work / "final.verification.json").read_text(encoding="utf-8"))
+    outputs = work / "outputs"
+    cli("render", project, "-o", outputs / "final.mp4")
+    assert sorted(p.name for p in outputs.iterdir()) == ["final.mp4"], "QA reports must stay in the work folder"
+    reports = project.parent / "reports"
+    assert all((reports / name).is_file() for name in ("final.qa.json", "final.audio.json", "final.review-01.png"))
+    verified = json.loads((reports / "final.verification.json").read_text(encoding="utf-8"))
     assert verified["frames"] == 180 and verified["duration"] == 6 and verified["audio"]
     assert (verified["width"], verified["height"]) == (360, 640)
     assert (work / "preview.html").is_file()

@@ -444,7 +444,7 @@ def _composite_tracks(manifest, output, compositor, width, height, fps, count, p
                 process.wait()
 
 
-def render_project(plan, output_path, preview=False, cache_dir=None, protected_paths=None):
+def render_project(plan, output_path, preview=False, cache_dir=None, protected_paths=None, report_dir=None):
     """Render a validated plan and return independently probed output metadata."""
     protected = {Path(p).resolve() for p in (protected_paths or [])}
     if isinstance(plan, (str, Path)):
@@ -490,10 +490,11 @@ def render_project(plan, output_path, preview=False, cache_dir=None, protected_p
     protected.update(referenced_files(plan))
     if output_path in protected:
         raise ValueError("Output cannot overwrite an audio source")
-    report_path = output_path.with_suffix(".audio.json")
+    report_path = (Path(report_dir).resolve() if report_dir else output_path.parent) / f"{output_path.stem}.audio.json"
     if report_path in protected:
         raise ValueError("Audio report cannot overwrite a project source")
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
     cache = Path(cache_dir).resolve() if cache_dir else output_path.parent/".beat-sync-cache"
     cache.mkdir(parents=True, exist_ok=True)
     audio_path, mix_report = mix_project_audio(plan, cache)

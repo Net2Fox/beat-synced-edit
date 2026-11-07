@@ -131,7 +131,7 @@ trims, reorders and retimes. Anchor types, IDs, `edge`, `offset_frames` and `sho
 (-1.5 dBTP; -9 to 0), `lra` (11 LU; 1 to 50). Silence and signals too short to measure are
 left unnormalized.
 
-The report `<name>.audio.json` (from `audio-mix`, and beside every preview or render MP4):
+The report `<name>.audio.json` (beside the `audio-mix` WAV, and in `<work>/reports/` for every preview or render):
 
 - `encoded_measurements`: `integrated_lufs`, `true_peak_dbtp`, `lra_lu` of the decoded
   output (the AAC track for an MP4).

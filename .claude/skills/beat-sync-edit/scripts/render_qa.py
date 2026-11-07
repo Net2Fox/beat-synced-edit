@@ -47,7 +47,7 @@ def guard_export_outputs(plan, video, output_dir=None, extra_protected=()):
     video = Path(video).resolve()
     directory = Path(output_dir).resolve() if output_dir else video.parent
     protected = referenced_files(plan) | {Path(p).resolve() for p in extra_protected}
-    named = {video, video.with_suffix(".audio.json"), video.with_suffix(".verification.json"), directory/f"{video.stem}.qa.json"}
+    named = {video, *(directory/f"{video.stem}{suffix}" for suffix in (".audio.json", ".verification.json", ".qa.json"))}
     pattern = re.compile(re.escape(video.stem)+r"\.review-\d+\.png$", re.IGNORECASE)
     conflicts = protected & named
     conflicts.update(p for p in protected if p.parent == directory and pattern.fullmatch(p.name))
