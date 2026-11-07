@@ -38,6 +38,31 @@ class TextOverlayTests(unittest.TestCase):
         self.assertEqual(self.resolved(switched)["color"], STYLES["energetic"]["foreground"])
         self.assertEqual(self.resolved(switched)["highlight_color"], STYLES["energetic"]["accent"])
 
+    def test_plate_follows_the_final_text_colour(self):
+        def contrast(a, b):
+            high, low = sorted((_luminance(a), _luminance(b)), reverse=True)
+            return (high + .05) / (low + .05)
+        captions = apply_style(self.plan(), "editorial")
+        captions["subtitle_style"] = {"color": "#FFFFFF"}
+        style = self.resolved(captions)
+        self.assertNotEqual(style["background"], "#F3EFE5CC")
+        self.assertGreaterEqual(contrast(style["color"], style["background"][:7]), 4.5)
+        title = apply_style(self.plan(track="titles", style={"color": "#FFFFFF"}), "editorial")
+        self.assertIsNone(self.resolved(title, "titles")["background"])
+        dark = apply_style(self.plan(), values={"foreground": "#000000"})
+        style = self.resolved(dark)
+        self.assertGreaterEqual(contrast(style["color"], style["background"][:7]), 4.5)
+
+    def test_switching_style_updates_text_baked_by_older_versions(self):
+        plan = self.plan()
+        plan["style"] = dict(STYLES["clean"], name="clean")
+        baked = {"color": "#FFFFFF", "highlight_color": "#FFD633", "safe_area": STYLES["clean"]["safe_area"], "font_size": 58}
+        plan["title_style"], plan["subtitle_style"] = dict(baked), dict(baked, color="#00FF00")
+        styled = apply_style(plan, "editorial")
+        self.assertNotIn("title_style", styled)
+        self.assertEqual(styled["subtitle_style"], {"color": "#00FF00"})
+        self.assertEqual(self.resolved(styled)["color"], "#00FF00")
+
     def test_every_style_preset_gives_readable_titles_and_captions(self):
         def contrast(a, b):
             high, low = sorted((_luminance(a), _luminance(b)), reverse=True)

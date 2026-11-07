@@ -171,8 +171,12 @@ style (`clean` if none).
 
 - Titles and captions take `color` (foreground), `highlight_color` (accent),
   `safe_area` and `font` from the palette, unless `text-style` or the cue sets
-  them. A dark foreground (`editorial`) also gives them a translucent plate of
-  the palette background, so the text stays readable over video.
+  them. When the final text colour is dark and no `background` was set, the
+  text gets a translucent plate (the palette background, or white if that is
+  too dark), so it stays readable over video. Light text keeps the default
+  dark caption box and plate-less titles.
+- Projects saved by an earlier version, which copied palette colours into the
+  text styles, are cleaned up by the next `style` call.
 - `font_size` and `animation` apply to graphic layers only; text sizes stay
   relative to the output (set them with `text-style`).
 - Switching presets updates every value `text-style` did not set.

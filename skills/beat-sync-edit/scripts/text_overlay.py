@@ -46,28 +46,46 @@ def _luminance(value):
     return .2126*channel(r) + .7152*channel(g) + .0722*channel(b)
 
 
+def _contrast(first, second):
+    high, low = sorted((_luminance(first), _luminance(second)), reverse=True)
+    return (high + .05) / (low + .05)
+
+
 def palette_text_style(style):
     """Title/caption values derived from the project `style` palette.
 
     Resolution order is defaults < palette < track style (text-style) < cue
-    style, so `style` never overwrites what text-style set. A dark foreground
-    gets a translucent plate of the palette background, because dark text
-    straight on video (or on the default dark caption box) is unreadable.
-    The palette's absolute font_size applies to graphic layers only; text
-    sizes stay relative to the output.
+    style, so `style` never overwrites what text-style set. The palette's
+    absolute font_size applies to graphic layers only; text sizes stay
+    relative to the output. See resolve_text_style for the plate rule.
     """
     style = style or {}
     values = {}
     if "foreground" in style:
         values["color"] = style["foreground"]
-        if _luminance(style["foreground"]) < .2 and "background" in style:
-            values["background"] = style["background"][:7] + "CC"
     if "accent" in style:
         values["highlight_color"] = style["accent"]
     for key in ("safe_area", "font"):
         if key in style:
             values[key] = style[key]
     return values
+
+
+def resolve_text_style(defaults, palette_style, track_style, cue_style):
+    """Merge one cue's style; give dark text a readable plate if none was chosen.
+
+    Dark text straight on video, or on the default dark caption box, is
+    unreadable. When neither the track nor the cue sets `background` and the
+    final colour is dark, the cue gets a translucent plate: the palette
+    background if it contrasts enough with the text, otherwise white.
+    """
+    explicit = {**track_style, **cue_style}
+    style = {**defaults, **palette_text_style(palette_style), **explicit}
+    if "background" not in explicit and _luminance(style["color"]) < .2:
+        plate = (palette_style or {}).get("background")
+        plate = plate[:7] + "CC" if plate else None
+        style["background"] = plate if plate and _contrast(style["color"], plate[:7]) >= 4.5 else "#FFFFFFCC"
+    return style
 
 
 def _style(value, label):
@@ -318,9 +336,8 @@ class TextCompositor:
                         "position": "bottom" if subtitle else "top", "align": "center",
                         "max_width": .82, "margin": .09, "max_lines": 3 if subtitle else 4,
                         "opacity": 1, "animation": "none", "highlight": False}
-            palette = palette_text_style(plan.get("style"))
             for cue in plan.get(track, []):
-                style = {**defaults, **palette, **plan.get(key, {}), **cue.get("style", {})}
+                style = resolve_text_style(defaults, plan.get("style"), plan.get(key, {}), cue.get("style", {}))
                 self.cues.append(_Cue(cue, style, width, height, scale, fps))
 
     def apply(self, frame_bgr, global_frame_index):

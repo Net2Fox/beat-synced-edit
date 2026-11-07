@@ -61,10 +61,37 @@ def apply_style(plan, name=None, values=None):
         style["name"] = name
     validate_style(style)
     result = copy.deepcopy(plan)
+    _forget_copied_palette(result)
     # Titles and captions read the palette at render time (text_overlay.palette_text_style),
     # below their own text-style settings, so nothing is copied into title_style/subtitle_style.
     result["style"] = style
     return result
+
+
+def _forget_copied_palette(plan):
+    """Drop palette values an earlier version copied into the text track styles.
+
+    Older projects stored the previous palette's colours in title_style and
+    subtitle_style; left in place they would now override every new palette.
+    A value is removed only when it still equals what that copy wrote.
+    """
+    previous = plan.get("style")
+    if not previous:
+        return
+    copied = {"color": previous.get("foreground", "#FFFFFF"), "highlight_color": previous.get("accent", "#FFD633"),
+              "safe_area": previous.get("safe_area", {})}
+    for field in ("font", "font_size"):
+        if field in previous:
+            copied[field] = previous[field]
+    for key in ("title_style", "subtitle_style"):
+        track = plan.get(key)
+        if not isinstance(track, dict):
+            continue
+        for field, value in copied.items():
+            if field in track and track[field] == value:
+                del track[field]
+        if not track:
+            del plan[key]
 
 
 def validate_graphics(plan):
