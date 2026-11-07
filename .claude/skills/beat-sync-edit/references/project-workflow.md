@@ -43,7 +43,7 @@ Write `<work>/annotations.json` keyed by clip IDs from `library.json`:
 | Field | Meaning |
 |---|---|
 | `tags` | non-empty strings; presets and `plan --tags` prefer matching clips |
-| `shot_type` | `wide`, `establishing`, `medium`, `closeup`, `close-up`, `detail`, `action` or `unknown` |
+| `shot_type` | `wide`, `medium`, `close`, `detail`, `action` or `unknown`; `establishing` (wide), `close-up`/`closeup` (close) and `extreme close-up`/`macro` (detail) are accepted and stored as the canonical name |
 | `action_time` | absolute source seconds inside the clip; the planner tries to land it on a beat ([Speed ramps](#speed-ramps)) |
 | `subject` | normalised `[left, top, width, height]` inside the image, measured on `subject_thumb`; tracking starts from that frame even when the plan uses a later part of the scene |
 | `quality` | 0 to 1 |

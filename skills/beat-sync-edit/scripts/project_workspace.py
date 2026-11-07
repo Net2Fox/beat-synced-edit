@@ -11,6 +11,8 @@ from pathlib import Path
 import tempfile
 from urllib.parse import quote
 
+from editorial_feedback import normalize_shot_type
+
 
 def read_json(path):
     return json.loads(Path(path).read_text(encoding="utf-8-sig"))
@@ -194,7 +196,7 @@ def apply_revisions(plan, operations):
                     raise ValueError("Replacement source range must fit inside the selected clip")
                 shot.update(asset_id=clip["asset_id"], clip_id=clip["id"], source=clip["source"],
                             kind=clip["kind"], source_start=start, source_end=end,
-                            tags=copy.deepcopy(clip.get("tags", [])), shot_type=clip.get("shot_type", "unknown"))
+                            tags=copy.deepcopy(clip.get("tags", [])), shot_type=normalize_shot_type(clip.get("shot_type")))
                 shot["speed_points"] = [{"at": 0, "speed": 1}, {"at": 1, "speed": 1}]
                 shot.pop("action_anchor", None)
                 shot["reframe"] = {"mode": "auto", "subject": clip.get("subject"), "subject_start": clip["start"]}

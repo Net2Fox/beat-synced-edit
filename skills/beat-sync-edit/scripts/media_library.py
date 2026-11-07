@@ -20,11 +20,12 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 from scenedetect import ContentDetector, detect
 
+from editorial_feedback import SHOT_TYPES, normalize_shot_type
+
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v", ".wmv", ".mts", ".m2ts"}
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
 MEDIA_EXTENSIONS = VIDEO_EXTENSIONS | IMAGE_EXTENSIONS
-SHOT_TYPES = {"unknown", "wide", "establishing", "medium", "closeup", "close-up", "detail", "action"}
 
 
 def _hash_file(path):
@@ -264,8 +265,11 @@ def apply_annotations(clips, annotations):
         clip = known[clip_id]
         if "tags" in values and (not isinstance(values["tags"], list) or any(not isinstance(tag, str) or not tag.strip() for tag in values["tags"])):
             raise ValueError(f"tags must contain nonempty strings: {clip_id}")
-        if "shot_type" in values and values["shot_type"] not in SHOT_TYPES:
-            raise ValueError(f"Unknown shot_type for {clip_id}: {values['shot_type']}")
+        if "shot_type" in values:
+            canonical = normalize_shot_type(values["shot_type"])
+            if canonical not in SHOT_TYPES:
+                raise ValueError(f"Unknown shot_type for {clip_id}: {values['shot_type']}; use one of {', '.join(SHOT_TYPES)}")
+            values = {**values, "shot_type": canonical}
         if values.get("subject") is not None:
             validate_subject(values["subject"])
         if "action_time" in values:

@@ -11,7 +11,7 @@ import math
 from pathlib import Path, PureWindowsPath
 
 from edit_presets import get_preset
-from editorial_feedback import explain_candidate, excluded_by_feedback, validate_preferences
+from editorial_feedback import explain_candidate, excluded_by_feedback, normalize_shot_type, validate_preferences
 from music_structure import apply_overrides, segment_structure
 
 
@@ -267,10 +267,7 @@ def _hash_distance(first, second):
 
 
 def _shot_type(value):
-    value = str(value).casefold().replace("-", "").replace("_", "").replace(" ", "")
-    return {"closeup": "close", "extremecloseup": "detail", "macro": "detail",
-            "establishing": "wide", "long": "wide", "mediumshot": "medium",
-            "wideshot": "wide"}.get(value, value)
+    return normalize_shot_type(value)
 
 
 def _curve_area(points, until=1.0):

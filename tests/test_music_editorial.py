@@ -12,7 +12,8 @@ from PIL import Image
 
 import _paths  # noqa: F401  (makes the skill's scripts importable)
 from editorial_commands import register_editorial_commands, run_editorial_command
-from editorial_feedback import rank_candidates, record_feedback
+from editorial_feedback import candidate_features, normalize_shot_type, preference_score, rank_candidates, record_feedback
+from media_library import apply_annotations
 from media_library import analyze_library
 from music_structure import analyze_waveform, apply_overrides
 from project_plan import build_plan, speed_bounds, validate_plan
@@ -133,6 +134,20 @@ class EditorialTests(unittest.TestCase):
         self.assertEqual(len(profile["events"]), 2)
         self.assertEqual(profile["events"][-1]["previous_event"], profile["events"][0]["id"])
         self.assertEqual(build_plan(beatmap, library, duration=5, query="night drift", preferences=profile)["edits"][0]["clip_id"], "c1")
+
+    def test_shot_type_aliases_reach_features_preferences_and_the_library(self):
+        self.assertEqual(normalize_shot_type("Close-up"), "close")
+        self.assertEqual(normalize_shot_type("establishing"), "wide")
+        close = {"id": "c", "shot_type": "close-up"}
+        self.assertEqual(candidate_features(close)["shot:close"], 1.)
+        self.assertEqual(candidate_features({"id": "w", "shot_type": "establishing"})["shot:wide"], 1.)
+        self.assertEqual(preference_score(close, {"shot_weights": {"close": 2}})["components"]["shot_preference"], 2.)
+        self.assertEqual(preference_score({"id": "d", "shot_type": "close"}, {"shot_weights": {"closeup": 1.5}})["components"]["shot_preference"], 1.5)
+        clips = [{"id": "c1", "start": 0, "end": 2}]
+        apply_annotations(clips, {"clips": {"c1": {"shot_type": "close-up"}}})
+        self.assertEqual(clips[0]["shot_type"], "close")
+        with self.assertRaisesRegex(ValueError, "Unknown shot_type"):
+            apply_annotations([{"id": "c2", "start": 0, "end": 2}], {"clips": {"c2": {"shot_type": "dutch angle"}}})
 
     def test_feedback_identity_survives_id_change_but_not_changed_source(self):
         _, library = inputs()

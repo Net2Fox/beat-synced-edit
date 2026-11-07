@@ -11,6 +11,18 @@ import math
 import re
 
 
+# One shot-type vocabulary for annotations, planning, ranking and feedback.
+SHOT_TYPES = ("wide", "medium", "close", "detail", "action", "unknown")
+_SHOT_ALIASES = {"establishing": "wide", "long": "wide", "wideshot": "wide", "mediumshot": "medium",
+                 "closeup": "close", "extremecloseup": "detail", "macro": "detail"}
+
+
+def normalize_shot_type(value):
+    """Canonical shot type: "close-up"/"closeup" -> "close", "establishing" -> "wide", etc."""
+    key = str(value or "unknown").casefold().replace("-", "").replace("_", "").replace(" ", "")
+    return _SHOT_ALIASES.get(key, key)
+
+
 def tokens(value):
     return set(re.findall(r"[^\W_]+", str(value).casefold(), flags=re.UNICODE))
 
@@ -26,7 +38,7 @@ def candidate_features(clip):
               "motion": float(clip.get("motion", 0)), "has_action": float(clip.get("action_time") is not None),
               "annotated": float(clip.get("semantic_source") == "annotation")}
     for name in ("wide", "medium", "close", "detail", "action"):
-        result["shot:"+name] = float(clip.get("shot_type") == name)
+        result["shot:"+name] = float(normalize_shot_type(clip.get("shot_type")) == name)
     for tag in clip.get("tags", []):
         result["tag:"+str(tag).casefold()] = 1.
     if any(not math.isfinite(value) for value in result.values()):
@@ -92,7 +104,8 @@ def preference_score(clip, profile=None, query=""):
     matched = sorted(query_terms & observed)
     components = {
         "tag_preferences": sum(float(profile.get("tag_weights", {}).get(tag, 0)) for tag in tags),
-        "shot_preference": float(profile.get("shot_weights", {}).get(clip.get("shot_type"), 0)),
+        "shot_preference": sum(float(weight) for name, weight in profile.get("shot_weights", {}).items()
+                               if normalize_shot_type(name) == normalize_shot_type(clip.get("shot_type"))),
         "asset_preference": float(profile.get("asset_weights", {}).get(str(clip.get("asset_id")), 0)),
         "query_match": 3. * len(matched) / max(1, len(query_terms)),
         "accepted_feedback": 2. if latest_decisions(profile).get(candidate_key(clip), {}).get("decision") == "accept" else 0.,
