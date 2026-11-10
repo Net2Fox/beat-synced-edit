@@ -380,7 +380,8 @@ def _frame_passthrough():
                                 encoding="utf-8", errors="replace").stdout
     except OSError:
         listed = ""
-    options = {line.split()[0] for line in listed.splitlines() if line.startswith("-")}
+    # A help line is "-name  text"; FFmpeg 7 and newer print "-name[:<stream_spec>] <type>  text".
+    options = {line.split()[0].split("[")[0] for line in listed.splitlines() if line.startswith("-")}
     if "-fps_mode" not in options and "-vsync" in options:
         return ("-vsync", "0")
     return ("-fps_mode", "passthrough")

@@ -243,8 +243,10 @@ class RenderIntegrationTests(unittest.TestCase):
 
         cases = {("-fps_mode", "passthrough"): [
                      long_help("-vsync              set video sync method globally; deprecated, use -fps_mode",
-                               "-fps_mode           set framerate mode for matching video streams"),   # 5.1 to 8
-                     long_help("-fps_mode           set framerate mode for matching video streams"),   # 9
+                               "-fps_mode           set framerate mode for matching video streams"),   # 5.1 to 6
+                     long_help("-vsync <>           set video sync method globally; deprecated, use -fps_mode",
+                               "-fps_mode[:<stream_spec>] <string>  set framerate mode for matching video streams"),  # 7, 8
+                     long_help("-fps_mode[:<stream_spec>] <string>  set framerate mode for matching video streams"),  # 9
                      long_help("-y                  overwrite output files"),                           # help changed
                      FileNotFoundError("ffmpeg")],
                  ("-vsync", "0"): [long_help("-vsync              video sync method")]}                  # before 5.1
