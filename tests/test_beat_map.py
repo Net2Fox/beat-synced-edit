@@ -127,6 +127,57 @@ class ContainerAudioTests(unittest.TestCase):
             _load_audio(joined)
         self.assertNotIn("ends early", str(caught.exception))
 
+    def test_whole_matroska_with_holes_in_the_audio_is_refused_like_mp4(self):
+        for suffix, codec in ((".mkv", "aac"), (".mkv", "libopus"), (".mka", "libvorbis")):
+            with self.subTest(codec=codec, suffix=suffix):
+                parts = []
+                for index, start in enumerate((0, 4)):
+                    parts.append(self.root / f"кусок {index}.mkv")
+                    ffmpeg("-f", "lavfi", "-i", "color=c=black:s=64x64:r=10:d=4", "-ss", str(start), "-t", "4",
+                           "-i", str(self.wav), "-c:v", "mpeg4", "-c:a", codec, str(parts[-1]))
+                quiet = self.root / "тихий кусок.mkv"
+                ffmpeg("-f", "lavfi", "-i", "color=c=black:s=64x64:r=10:d=3", "-c:v", "mpeg4", str(quiet))
+                listing = self.root / "перечень.txt"
+                listing.write_text("".join(f"file '{part.name}'\n" for part in (parts[0], quiet, parts[1])), encoding="utf-8")
+                joined = self.root / f"склейка{suffix}"
+                ffmpeg("-f", "concat", "-safe", "0", "-i", str(listing), "-c", "copy",
+                       *(["-map", "0:a"] if suffix == ".mka" else []), str(joined))
+                with self.assertRaisesRegex(RuntimeError, r"has gaps.*1[01]\.\d+s.*[78]\.\d+s.*-vn song\.wav"):
+                    _load_audio(joined)
+
+    def test_stale_matroska_tag_and_wmv_with_a_longer_picture_still_load(self):
+        real = subprocess.run
+        # An editing tool left a DURATION tag twice too long; FFmpeg decodes the whole file without a word.
+        whole = self.root / "старый тег.mka"
+        ffmpeg("-i", str(self.wav), "-c:a", "libvorbis", str(whole))
+
+        def stale_tag(arguments, **options):
+            result = real(arguments, **options)
+            if arguments[0] == "ffprobe" and b'"streams"' in result.stdout:
+                info = json.loads(result.stdout)
+                self.assertTrue(info["streams"][0]["tags"]["DURATION"].startswith("00:00:08"))
+                info["streams"][0]["tags"]["DURATION"] = "00:00:16.000000000"
+                result = subprocess.CompletedProcess(arguments, 0, json.dumps(info).encode(), b"")
+            return result
+
+        with patch.object(beat_map.subprocess, "run", side_effect=stale_tag):
+            self.assertAlmostEqual(len(_load_audio(whole)[0]) / 22050, 8, delta=.15)
+        # In ASF every stream reports the file's length: 8 s of sound under a 20 s picture is a whole file,
+        # also when FFmpeg prints an unrelated line.
+        listed = real(["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True).stdout
+        if " wmav2 " not in listed or " wmv2 " not in listed:
+            self.skipTest("this FFmpeg has no WMA/WMV encoder")
+        picture = self.root / "длинная картинка.wmv"
+        ffmpeg("-f", "lavfi", "-i", "color=c=black:s=64x64:r=10:d=20", "-i", str(self.wav),
+               "-c:v", "wmv2", "-c:a", "wmav2", str(picture))
+
+        def unrelated_line(arguments, **options):
+            result = real(arguments, **options)
+            return subprocess.CompletedProcess(arguments, 0, result.stdout, b"harmless line\n") if arguments[0] == "ffmpeg" else result
+
+        with patch.object(beat_map.subprocess, "run", side_effect=unrelated_line):
+            self.assertAlmostEqual(len(_load_audio(picture)[0]) / 22050, 8, delta=.2)
+
     def test_matroska_length_is_the_audio_streams_own(self):
         # Audio (8 s) under a longer picture (20 s), joined by stream copy so FFmpeg prints an error-level
         # line about timestamps although nothing is missing.

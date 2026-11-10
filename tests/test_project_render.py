@@ -267,10 +267,13 @@ class RenderIntegrationTests(unittest.TestCase):
             commands.append(list(arguments))
             return real(arguments, *positional, **options)
 
+        exercised = []
         for spelling in (("-fps_mode", "passthrough"), ("-vsync", "0")):
             listed = subprocess.run(["ffmpeg", "-hide_banner", "-h", "long"], capture_output=True, text=True).stdout
-            if not any(line.startswith(spelling[0] + " ") for line in listed.splitlines()):
+            # Same reading as the helper: FFmpeg 7 and newer print "-name[:<stream_spec>] <type>  text".
+            if spelling[0] not in {line.split()[0].split("[")[0] for line in listed.splitlines() if line.startswith("-")}:
                 continue        # the installed FFmpeg does not know this spelling
+            exercised.append(spelling)
             commands.clear()
             with patch.object(project_render, "_frame_passthrough", return_value=spelling), \
                     patch.object(project_render.subprocess, "Popen", side_effect=record):
@@ -279,6 +282,7 @@ class RenderIntegrationTests(unittest.TestCase):
             self.assertEqual(decoder[decoder.index(spelling[0]) + 1], spelling[1])
             self.assertFalse({"-fps_mode", "-vsync"} - {spelling[0]} & set(decoder))
             self.assertEqual((result["frames"], result["cache_hits"]), (reference["frames"], 3))
+        self.assertTrue(exercised, "the installed FFmpeg lists neither -fps_mode nor -vsync")
 
     def test_preview_manual_subject_crop_and_contain(self):
         plan = self.make_plan()

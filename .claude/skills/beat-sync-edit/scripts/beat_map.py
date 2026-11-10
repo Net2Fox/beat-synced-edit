@@ -119,7 +119,7 @@ def _load_audio(audio_path, sample_rate=22050):
                                    f"Decoding it needs FFmpeg and ffprobe on PATH ({exc})") from load_error
 
         probe = run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries",
-                     "stream=start_time,duration:stream_tags:format=start_time,duration,format_name",
+                     "stream=start_time,duration:stream_tags:format=start_time,duration,format_name,nb_streams",
                      "-of", "json", str(audio_path)])
         try:
             info = json.loads(probe.stdout or b"{}")
@@ -160,6 +160,7 @@ def _load_audio(audio_path, sample_rate=22050):
         # containers that record the real length are checked: a raw AAC/MP3 stream's duration is an estimate.
         container = set(str((info.get("format") or {}).get("format_name") or "").split(","))
         expected = seconds(stream.get("duration"))
+        tagged = False
         if expected is None and "matroska" in container:
             # Matroska/WebM keep the time a stream ends in a DURATION tag ("00:03:25.481000000");
             # mkvmerge wrote it per language for years ("DURATION-eng").
@@ -168,6 +169,7 @@ def _load_audio(audio_path, sample_rate=22050):
             try:
                 hours, minutes, rest = str(tag).split(":")
                 expected = seconds(int(hours) * 3600 + int(minutes) * 60 + float(rest) - max(stream_start or 0, 0))
+                tagged = expected is not None
             except ValueError:
                 # Only the whole file's length is known and the audio may be shorter than the picture:
                 # use it only when the demuxer itself says that the file is cut off.
@@ -176,8 +178,11 @@ def _load_audio(audio_path, sample_rate=22050):
                     expected = expected - max(container_start or 0, 0) if "File ended prematurely" in detail else None
         decoded = len(samples) / sample_rate
         # MP4/MOV: the length comes from the sample index and a cut inside a video frame ends silently.
-        # Matroska, FLAC, WavPack, TTA and ASF/WMA: only when FFmpeg reported a problem.
-        checked = "mov" in container or (detail and container & {"matroska", "flac", "wv", "tta", "asf"})
+        # Matroska with the stream's own DURATION tag is looked at as well, for holes only (see below).
+        # Otherwise Matroska, FLAC, WavPack, TTA and audio-only ASF/WMA: only when FFmpeg reported a
+        # problem. In ASF with a picture every stream carries the file's length, not its own.
+        reported = {"matroska", "flac", "wv", "tta"} | ({"asf"} if (info.get("format") or {}).get("nb_streams") == 1 else set())
+        checked = "mov" in container or tagged or bool(detail and container & reported)
         if checked and expected and decoded < expected - max(.5, .02 * expected):
             if not detail:
                 # FFmpeg was silent: the file is cut short, or it is whole and its audio timestamps have
@@ -193,8 +198,11 @@ def _load_audio(audio_path, sample_rate=22050):
                                        f"it holds {decoded:.2f}s of sound, so measured beat times would not match "
                                        "the render. Extract the song first (ffmpeg -i <file> -vn song.wav) and "
                                        "analyze that file.") from load_error
-            raise RuntimeError(f"Only {decoded:.2f}s of the {expected:.2f}s of audio in {audio_path} could be "
-                               f"decoded: {detail or 'the file ends early (truncated download or copy?)'}") from load_error
+            if detail or "mov" in container:
+                raise RuntimeError(f"Only {decoded:.2f}s of the {expected:.2f}s of audio in {audio_path} could be "
+                                   f"decoded: {detail or 'the file ends early (truncated download or copy?)'}") from load_error
+            # Matroska, FFmpeg silent and nothing at the tagged end: a stale tag left by an editing tool
+            # is as likely as damage, which FFmpeg reports ("File ended prematurely"). Load it.
         return samples.astype(np.float32, copy=True), sample_rate
 
 
