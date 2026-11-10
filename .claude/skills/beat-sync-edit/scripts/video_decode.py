@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import time
@@ -31,6 +32,8 @@ import cv2
 # recipe are not reused.
 PROXY_RECIPE = "h264-540p-every-frame-source-timestamps-2"
 PROXY_MAX_AGE_DAYS = 30
+# The only names this module writes: "<20 hex>.mp4" and, while building, "<20 hex>.<pid>.partial.mp4".
+_OWN_NAME = re.compile(r"[0-9a-f]{20}(\.\d+)?(\.partial)?\.mp4")
 _CHECKED = {}
 
 
@@ -71,10 +74,14 @@ def _proxy_dir():
 
 
 def _prune(folder, keep):
-    """Remove proxies unused for PROXY_MAX_AGE_DAYS and builds abandoned more than a day ago."""
+    """Remove proxies unused for PROXY_MAX_AGE_DAYS and builds abandoned more than a day ago.
+
+    BEAT_SYNC_PROXY_DIR may point at a folder that holds other things, even the
+    footage itself, so only files named by this module are ever deleted.
+    """
     now = time.time()
     for path in folder.glob("*.mp4"):
-        if path == keep:
+        if path == keep or not _OWN_NAME.fullmatch(path.name):
             continue
         try:
             limit = 1 if path.name.endswith(".partial.mp4") else PROXY_MAX_AGE_DAYS
@@ -94,25 +101,28 @@ def _build(source, proxy):
     head = ["ffmpeg", "-y", "-v", "error", "-nostdin", "-i", str(source), "-map", "0:v:0", "-an",
             # Even width and height (libx264 needs both), never upscaled.
             "-vf", "scale=-2:'2*trunc(min(540,ih)/2)'"]
-    # Keep every frame on the source's own timestamps, also for variable frame rate.
-    tail = ["-enc_time_base", "-1", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
-            "-pix_fmt", "yuv420p", "-f", "mp4", str(partial)]
+    tail = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-f", "mp4", str(partial)]
+    # Keep every frame on the source's own timestamps, also for variable frame rate. The options
+    # were renamed over time: "-fps_mode" replaced "-vsync" in FFmpeg 5.1 (9.0 dropped "-vsync"),
+    # and the source time base is "demux" since 6.1 and "-1" before (9.0 rejects "-1").
+    sync, time_base = ["-fps_mode", "passthrough"], "demux"
     try:
-        # FFmpeg 5.1 renamed -vsync to -fps_mode; older builds know only -vsync.
-        for sync in (["-fps_mode", "passthrough"], ["-vsync", "0"]):
+        while True:
             try:
-                result = subprocess.run(head + sync + tail, capture_output=True, text=True,
-                                        encoding="utf-8", errors="replace")
+                result = subprocess.run(head + sync + ["-enc_time_base", time_base] + tail, capture_output=True,
+                                        text=True, encoding="utf-8", errors="replace")
             except OSError as exc:
                 raise RuntimeError(f"OpenCV cannot decode {source} and FFmpeg could not be started "
                                    f"to read it instead: {exc}") from exc
             detail = (result.stderr or "").strip()[-2000:]
             if result.returncode == 0 and partial.is_file() and partial.stat().st_size > 0:
                 break
-            if not ("fps_mode" in detail and "nrecognized option" in detail):
+            if sync[0] == "-fps_mode" and "fps_mode" in detail and "nrecognized option" in detail:
+                sync, time_base = ["-vsync", "0"], "-1"      # FFmpeg older than 5.1
+            elif time_base == "demux" and "Invalid time base" in detail:
+                time_base = "-1"                              # FFmpeg 5.1 to 6.0
+            else:
                 raise RuntimeError(f"Cannot decode video with OpenCV or FFmpeg: {source}\n{detail}")
-        else:
-            raise RuntimeError(f"Cannot decode video with OpenCV or FFmpeg: {source}\n{detail}")
         if not _opencv_can_decode(partial):
             raise ValueError(f"Cannot decode video: {source}")
         try:
@@ -142,12 +152,20 @@ def decodable_path(path):
     folder = _proxy_dir()
     digest = hashlib.sha256(repr((key, PROXY_RECIPE)).encode("utf-8")).hexdigest()[:20]
     proxy = folder / f"{digest}.mp4"
-    if not (proxy.is_file() and proxy.stat().st_size > 0 and _opencv_can_decode(proxy)):
-        _build(source, proxy)
-        _prune(folder, proxy)
-    try:
-        os.utime(proxy)  # mark as used, so pruning keeps it
-    except OSError:
-        pass
+    for _ in range(2):
+        try:
+            ready = proxy.is_file() and proxy.stat().st_size > 0 and _opencv_can_decode(proxy)
+        except OSError:
+            ready = False
+        if not ready:
+            _build(source, proxy)
+            _prune(folder, proxy)
+        try:
+            os.utime(proxy)  # mark as used, so pruning keeps it
+        except FileNotFoundError:
+            continue         # another run pruned it between the check and now: build it again
+        except OSError:
+            pass
+        break
     _CHECKED[key] = str(proxy)
     return _CHECKED[key]

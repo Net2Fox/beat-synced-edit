@@ -125,4 +125,5 @@ built once with FFmpeg; the first `analyze` of such footage takes about as
 long as encoding it. Clips keep the original path and rendering reads the
 original. Proxies sit in the per-user cache beside the speech models
 (`.../beat-sync-edit/decode-proxies`, or `BEAT_SYNC_PROXY_DIR`); they are safe
-to delete, and one unused for 30 days is removed when another is built.
+to delete, and one unused for 30 days is removed when another is built; other
+files in that folder are never touched.

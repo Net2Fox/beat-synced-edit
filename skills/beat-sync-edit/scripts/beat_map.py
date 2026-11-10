@@ -119,7 +119,8 @@ def _load_audio(audio_path, sample_rate=22050):
                                    f"Decoding it needs FFmpeg and ffprobe on PATH ({exc})") from load_error
 
         probe = run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries",
-                     "stream=start_time,duration:format=start_time", "-of", "json", str(audio_path)])
+                     "stream=start_time,duration:stream_tags=DURATION:format=start_time,duration,format_name",
+                     "-of", "json", str(audio_path)])
         try:
             info = json.loads(probe.stdout or b"{}")
         except ValueError:
@@ -155,12 +156,25 @@ def _load_audio(audio_path, sample_rate=22050):
             raise RuntimeError(f"Cannot decode audio from {audio_path}: {detail or load_error}") from load_error
         if not np.all(np.isfinite(samples)):
             raise RuntimeError(f"Decoded audio from {audio_path} contains non-finite samples") from load_error
+        # FFmpeg exits 0 after a truncated or damaged container; do not analyze half a song. Only
+        # containers that record the real length are checked: a raw AAC/MP3 stream's duration is an estimate.
+        container = set(str((info.get("format") or {}).get("format_name") or "").split(","))
         expected = seconds(stream.get("duration"))
+        if expected is None and "matroska" in container:
+            # Matroska/WebM keep a stream's length in a DURATION tag ("00:03:25.481000000").
+            try:
+                hours, minutes, rest = str((stream.get("tags") or {}).get("DURATION")).split(":")
+                expected = seconds(int(hours) * 3600 + int(minutes) * 60 + float(rest))
+            except ValueError:
+                expected = seconds((info.get("format") or {}).get("duration"))
         decoded = len(samples) / sample_rate
-        if detail and expected and decoded < expected - max(.5, .02 * expected):
-            # FFmpeg exits 0 after a damaged or truncated container; do not analyze half a song.
-            raise RuntimeError(f"Only {decoded:.2f}s of the {expected:.2f}s of audio in {audio_path} "
-                               f"could be decoded: {detail}") from load_error
+        # MP4/MOV: the length comes from the sample index and a cut inside a video frame ends
+        # silently. Matroska: only when FFmpeg reported a problem, since the audio may simply be
+        # shorter than the picture.
+        checked = "mov" in container or ("matroska" in container and detail)
+        if checked and expected and decoded < expected - max(.5, .02 * expected):
+            raise RuntimeError(f"Only {decoded:.2f}s of the {expected:.2f}s of audio in {audio_path} could be "
+                               f"decoded: {detail or 'the file ends early (truncated download or copy?)'}") from load_error
         return samples.astype(np.float32, copy=True), sample_rate
 
 

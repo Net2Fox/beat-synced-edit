@@ -84,13 +84,43 @@ class ContainerAudioTests(unittest.TestCase):
             _load_audio(late)
 
     def test_truncated_container_is_not_analyzed_as_a_shorter_song(self):
-        whole = self.root / "целый.m4a"
-        ffmpeg("-i", str(self.wav), "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(whole))
-        self.assertAlmostEqual(len(_load_audio(whole)[0]) / 22050, 8, delta=.15)
-        damaged = self.root / "обрезанный.m4a"
-        damaged.write_bytes(whole.read_bytes()[:whole.stat().st_size // 2])
-        with self.assertRaisesRegex(RuntimeError, r"Only \d+\.\d+s of the 8\.\d+s of audio"):
+        for name, codec in (("целый.m4a", ["-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart"]),
+                            ("целый.webm", ["-c:a", "libopus"])):
+            with self.subTest(name):
+                whole = self.root / name
+                ffmpeg("-i", str(self.wav), *codec, str(whole))
+                self.assertAlmostEqual(len(_load_audio(whole)[0]) / 22050, 8, delta=.15)
+                damaged = self.root / ("обрезанный" + whole.suffix)
+                damaged.write_bytes(whole.read_bytes()[:whole.stat().st_size // 2])
+                with self.assertRaisesRegex(RuntimeError, r"Only \d+\.\d+s of the 8\.\d+s of audio"):
+                    _load_audio(damaged)
+
+    def test_mp4_cut_inside_a_video_frame_ends_silently_but_is_refused(self):
+        # With large video packets the next audio packet lies far beyond the cut: FFmpeg reaches a
+        # clean end of file, exits 0 and prints nothing, yet half of the song is missing.
+        whole = self.root / "с картинкой.mp4"
+        ffmpeg("-f", "lavfi", "-i", "testsrc2=s=640x360:r=5:d=8,noise=alls=40:allf=t", "-i", str(self.wav),
+               "-c:v", "mjpeg", "-q:v", "2", "-c:a", "aac", "-movflags", "+faststart", str(whole))
+        listed = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "packet=pos",
+                                 "-of", "csv=p=0", str(whole)], check=True, capture_output=True, text=True).stdout.split()
+        middle = int(listed[len(listed) // 2].strip(","))
+        damaged = self.root / "с картинкой, обрезан.mp4"
+        damaged.write_bytes(whole.read_bytes()[:middle + 1000])
+        with self.assertRaisesRegex(RuntimeError, r"Only \d+\.\d+s of the 8\.\d+s of audio.*ends early"):
             _load_audio(damaged)
+
+    def test_shorter_audio_and_estimated_durations_are_not_mistaken_for_damage(self):
+        # Audio shorter than the picture is a complete file.
+        long_picture = self.root / "длинная картинка.mkv"
+        ffmpeg("-f", "lavfi", "-i", "color=c=black:s=64x64:r=10:d=20", "-i", str(self.wav),
+               "-c:v", "mpeg4", "-c:a", "aac", str(long_picture))
+        self.assertAlmostEqual(len(_load_audio(long_picture)[0]) / 22050, 8, delta=.15)
+        # A raw AAC stream has no recorded length (ffprobe estimates one) and a rip often ends mid-frame.
+        raw = self.root / "поток.aac"
+        ffmpeg("-i", str(self.wav), "-c:a", "aac", "-b:a", "128k", "-f", "adts", str(raw))
+        whole_stream = len(_load_audio(raw)[0])
+        raw.write_bytes(raw.read_bytes()[:-100])
+        self.assertLess(whole_stream - len(_load_audio(raw)[0]), .5 * 22050)   # a few frames lost, still loads
 
     def test_missing_ffmpeg_names_the_song_and_the_requirement(self):
         with patch.object(beat_map.subprocess, "run", side_effect=FileNotFoundError(2, "No such file", "ffprobe")):
@@ -105,21 +135,21 @@ class ContainerAudioTests(unittest.TestCase):
         self.assertNotIn("FFmpeg", str(caught.exception))
 
     def test_long_ffmpeg_output_is_cut_in_the_error(self):
-        junk = self.root / "мусор.mp3"
-        junk.write_bytes(bytes(range(256)) * 4000)
-        # libmpg123 (inside soundfile) and FFmpeg both complain about every bad frame; only the
-        # second ends up in the exception. Keep the first off the test log.
-        saved, null = os.dup(2), os.open(os.devnull, os.O_WRONLY)
-        os.dup2(null, 2)
-        try:
+        real = subprocess.run
+
+        def noisy_decoder(arguments, **options):
+            if arguments[0] != "ffmpeg":
+                return real(arguments, **options)
+            noise = b"[mp3float] Header missing\n" * 4000 + b"the last line names the cause\n"
+            return subprocess.CompletedProcess(arguments, 1, b"", noise)
+
+        with patch.object(beat_map.subprocess, "run", side_effect=noisy_decoder):
             with self.assertRaises(RuntimeError) as caught:
-                _load_audio(junk)
-        finally:
-            os.dup2(saved, 2)
-            os.close(saved)
-            os.close(null)
-        self.assertLess(len(str(caught.exception)), 3000)
-        self.assertIn("мусор", str(caught.exception))
+                _load_audio(self.mp4)
+        message = str(caught.exception)
+        self.assertLess(len(message), 2300)
+        self.assertIn("the last line names the cause", message)
+        self.assertIn("бит в видео", message)
 
 
 if __name__ == "__main__":

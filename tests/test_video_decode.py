@@ -144,9 +144,11 @@ class VideoDecodeTests(unittest.TestCase):
         source = self.root / "переменная частота.mkv"
         listed = subprocess.run(["ffmpeg", "-hide_banner", "-h", "full"], capture_output=True, text=True).stdout
         sync = ["-fps_mode", "vfr"] if "-fps_mode" in listed else ["-vsync", "vfr"]
-        # Frames 0-9 at 30 fps, then every fifth frame: gaps of 33 ms and 167 ms.
-        self.ffmpeg("-f", "lavfi", "-i", "testsrc=s=160x90:r=30:d=2", "-vf", "select='lt(n,10)+not(mod(n,5))'",
-                    *sync, "-c:v", "mjpeg", str(source))
+        # Frames 0-9 of a 30 fps clip, then every fifth, each odd one 12 ms late: gaps of about 22/45 ms,
+        # then 155-179 ms, off any 1/30 s grid, so a proxy on the encoder's own time base would move them.
+        self.ffmpeg("-f", "lavfi", "-i", "testsrc=s=160x90:r=30:d=2", "-vf",
+                    "select='lt(n,10)+not(mod(n,5))',settb=1/1000,setpts='PTS+12*mod(N,2)'",
+                    *sync, "-enc_time_base", "1/1000", "-c:v", "mjpeg", str(source))
         expected = self.timestamps(source)
         self.assertGreater(max(np.diff(expected)) / min(np.diff(expected)), 3, "fixture is not variable frame rate")
         with self.unreadable(source):
@@ -154,22 +156,42 @@ class VideoDecodeTests(unittest.TestCase):
         self.assertEqual(len(measured), len(expected))
         self.assertLess(max(abs(a - b) for a, b in zip(measured, expected)), .0015)
 
-    def test_older_ffmpeg_without_fps_mode_is_retried_with_vsync(self):
+    def build_with(self, answers):
+        """Build a proxy with an FFmpeg that rejects some options, as other releases do."""
         source = self.make_video(self.root / "clip.avi")
         real, calls = subprocess.run, []
 
-        def older_ffmpeg(arguments, **options):
+        def other_release(arguments, **options):
             calls.append(arguments)
-            if "-fps_mode" in arguments:   # what FFmpeg before 5.1 answers
-                return subprocess.CompletedProcess(arguments, 1, "", "Unrecognized option 'fps_mode'.\n"
-                                                   "Error splitting the argument list: Option not found\n")
+            for rejected, message in answers:
+                if all(part in arguments for part in rejected):
+                    return subprocess.CompletedProcess(arguments, 1, "", message)
             return real(arguments, **options)
 
-        with self.unreadable(source), patch.object(video_decode.subprocess, "run", side_effect=older_ffmpeg):
+        with self.unreadable(source), patch.object(video_decode.subprocess, "run", side_effect=other_release):
             proxy = decodable_path(source)
-        self.assertEqual(["-fps_mode" in call for call in calls], [True, False])
-        self.assertIn("-vsync", calls[1])
         self.assertEqual(self.frames(proxy)[0], 30)
+        return calls
+
+    def test_current_ffmpeg_gets_only_options_it_still_accepts(self):
+        # FFmpeg 9 removed "-vsync" and rejects "-enc_time_base -1".
+        removed = [(["-vsync"], "Unrecognized option 'vsync'.\n"), (["-enc_time_base", "-1"], "Invalid time base: -1\n")]
+        calls = self.build_with(removed)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][calls[0].index("-enc_time_base") + 1], "demux")
+        self.assertIn("-fps_mode", calls[0])
+
+    def test_ffmpeg_before_6_1_is_retried_with_the_numeric_time_base(self):
+        calls = self.build_with([(["-enc_time_base", "demux"], "Invalid time base: demux\n")])
+        self.assertEqual([call[call.index("-enc_time_base") + 1] for call in calls], ["demux", "-1"])
+        self.assertTrue(all("-fps_mode" in call for call in calls))
+
+    def test_ffmpeg_before_5_1_is_retried_with_vsync(self):
+        unknown = "Unrecognized option 'fps_mode'.\nError splitting the argument list: Option not found\n"
+        calls = self.build_with([(["-fps_mode"], unknown), (["-enc_time_base", "demux"], "Invalid time base: demux\n")])
+        self.assertEqual(["-fps_mode" in call for call in calls], [True, False])
+        self.assertEqual(calls[1][calls[1].index("-vsync") + 1], "0")
+        self.assertEqual(calls[1][calls[1].index("-enc_time_base") + 1], "-1")
 
     def test_two_runs_building_the_same_proxy_do_not_share_a_partial_file(self):
         source = self.make_video(self.root / "clip.avi")
@@ -199,19 +221,40 @@ class VideoDecodeTests(unittest.TestCase):
                 patch.object(video_decode.tempfile, "TemporaryFile", side_effect=read_only_first):
             self.assertEqual(video_decode._proxy_dir(), (cache / "beat-sync-edit" / "decode-proxies").resolve())
 
-    def test_building_prunes_only_stale_proxies(self):
+    def test_building_prunes_only_stale_proxies_of_its_own(self):
         self.proxies.mkdir()
         day = 86400
-        ages = {"давний.mp4": 40 * day, "брошенный.123.partial.mp4": 2 * day, "недавний.mp4": day,
-                "идёт.456.partial.mp4": 60, "заметка.txt": 400 * day}
+        stale, abandoned = "0" * 20 + ".mp4", "1" * 20 + ".123.partial.mp4"
+        recent, running = "2" * 20 + ".mp4", "3" * 20 + ".456.partial.mp4"
+        # The folder may be one the user also keeps footage in: nothing but this module's files may go.
+        foreign = ["отпуск 2019.mp4", "final_export.7.partial.mp4", "0123456789abcdef0123.MP4", "заметка.txt"]
+        ages = {stale: 40 * day, abandoned: 2 * day, recent: day, running: 60, **{name: 400 * day for name in foreign}}
         for name, age in ages.items():
             (self.proxies / name).write_bytes(b"x")
             os.utime(self.proxies / name, (time.time() - age,) * 2)
         source = self.make_video(self.root / "clip.avi")
         with self.unreadable(source):
             proxy = Path(decodable_path(source))
-        self.assertEqual({path.name for path in self.proxies.iterdir()},
-                         {proxy.name, "недавний.mp4", "идёт.456.partial.mp4", "заметка.txt"})
+        self.assertEqual({path.name for path in self.proxies.iterdir()}, {proxy.name, recent, running, *foreign})
+
+    def test_proxy_pruned_by_another_run_is_built_again(self):
+        source = self.make_video(self.root / "clip.avi")
+        with self.unreadable(source):
+            proxy = Path(decodable_path(source))
+            video_decode._CHECKED.clear()
+            real, state = os.utime, {"pruned": False}
+
+            def pruned_meanwhile(path, *arguments, **options):
+                if not state["pruned"]:        # the other run deletes the stale proxy right after our check
+                    state["pruned"] = True
+                    Path(path).unlink()
+                    raise FileNotFoundError(path)
+                return real(path, *arguments, **options)
+
+            with patch.object(video_decode.os, "utime", side_effect=pruned_meanwhile):
+                again = Path(decodable_path(source))
+        self.assertEqual(again, proxy)
+        self.assertEqual(self.frames(again)[0], 30)
 
     def test_changed_recipe_does_not_reuse_older_proxies(self):
         source = self.make_video(self.root / "clip.avi")
