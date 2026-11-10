@@ -60,6 +60,7 @@ finished files go (for example `outputs/`) unless the user picks another place.
 | `<work>/project.json` | the editing project, with `.history/` snapshots and a `cache/` of rendered shots |
 | `<work>/preview.mp4`, `.html` | fast review render and offline review page |
 | `<work>/numba-cache/` | music-analysis cache; safe to delete |
+| per-user cache `beat-sync-edit/decode-proxies/` | outside the project: small H.264 copies of sources OpenCV cannot decode (AV1), read only by `analyze` and subject tracking, never rendered; safe to delete; `BEAT_SYNC_PROXY_DIR` moves it |
 | `<work>/reports/` | QA of every preview and render: `final.qa.json`, `final.review-NN.png`, `final.verification.json`, `final.audio.json` (and `preview.*`) |
 | `<outputs>/final.mp4` | the delivered video only |
 

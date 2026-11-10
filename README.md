@@ -162,6 +162,9 @@ Each model downloads once into a shared per-user cache
 Windows) and is reused by every project. Set `BEAT_SYNC_MODEL_DIR` or pass
 `--model-dir` to choose another folder; if the cache is not writable, models
 go to `models/` beside the project. `--local-files-only` requires an already cached/local model.
+The same per-user cache holds `decode-proxies/`: small H.264 copies of sources
+OpenCV cannot decode (AV1), used only for analysis and tracking. They are safe
+to delete; `BEAT_SYNC_PROXY_DIR` chooses another folder.
 Recognition processes audio locally; it does not upload it to a transcription
 service. The agent itself follows its own model and tool data-handling settings.
 Manual titles and SRT/VTT files do not need Whisper.

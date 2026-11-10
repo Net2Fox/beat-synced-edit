@@ -4,7 +4,9 @@ analyze_audio() measures tempo, beats, the energy curve, the most energetic
 segments and the musical structure used by ``edit_project.py music``.
 """
 
+import json
 import os
+import subprocess
 import tempfile
 
 import numpy as np
@@ -99,20 +101,66 @@ def _load_audio(audio_path, sample_rate=22050):
 
     soundfile reads WAV/FLAC/OGG/MP3 only and librosa 1.0 has no audioread
     fallback, so a song inside MP4/M4A/WebM/MKV fails with "Format not
-    recognised". Decode those with the system FFmpeg, which the skill already
-    requires for rendering.
+    recognised". Those are decoded with the system FFmpeg, which the skill
+    already requires for rendering, to the same signal librosa would return:
+    22050 Hz, float32, channels averaged.
     """
     try:
         return librosa.load(audio_path)
     except Exception as load_error:  # soundfile.LibsndfileError, NoBackendError, ...
-        import subprocess
-        result = subprocess.run([
-            "ffmpeg", "-v", "error", "-nostdin", "-i", str(audio_path), "-map", "0:a:0", "-vn",
-            "-ac", "1", "-ar", str(sample_rate), "-f", "f32le", "pipe:1"], capture_output=True)
-        samples = np.frombuffer(result.stdout, dtype="<f4")
-        if result.returncode != 0 or not len(samples) or not np.all(np.isfinite(samples)):
-            detail = result.stderr.decode("utf-8", "replace").strip()
-            raise RuntimeError(f"Cannot decode audio from {audio_path}: {load_error}\n{detail}") from load_error
+        if not os.path.isfile(audio_path):
+            raise
+
+        def run(arguments):
+            try:
+                return subprocess.run(arguments, capture_output=True)
+            except OSError as exc:
+                raise RuntimeError(f"Cannot read audio from {audio_path}: {load_error}. "
+                                   f"Decoding it needs FFmpeg and ffprobe on PATH ({exc})") from load_error
+
+        probe = run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries",
+                     "stream=start_time,duration:format=start_time", "-of", "json", str(audio_path)])
+        try:
+            info = json.loads(probe.stdout or b"{}")
+        except ValueError:
+            info = {}
+        streams = info.get("streams") or []
+        if probe.returncode == 0 and not streams:
+            raise RuntimeError(f"No audio stream in {audio_path}") from load_error
+
+        def seconds(value):
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                return None
+            return number if np.isfinite(number) else None
+
+        stream = streams[0] if streams else {}
+        stream_start = seconds(stream.get("start_time"))
+        container_start = seconds((info.get("format") or {}).get("start_time"))
+        if stream_start is not None and container_start is not None and stream_start - container_start > .05:
+            # These samples start at the first audio sample; the renderer seeks the song on the
+            # container's timeline (audio_mix.decode_audio). A late audio stream would shift every beat.
+            raise RuntimeError(f"The audio in {audio_path} starts {stream_start - container_start:.3f}s after the "
+                               "file itself, so measured beat times would not match the render. Extract the song "
+                               "first (ffmpeg -i <file> -vn song.wav) and analyze that file.") from load_error
+
+        result = run(["ffmpeg", "-v", "error", "-nostdin", "-i", str(audio_path), "-map", "0:a:0", "-vn",
+                      # Average the channels like librosa; plain -ac 1 sums stereo 3 dB hotter.
+                      "-af", "aresample=rematrix_maxval=1.0", "-ac", "1", "-ar", str(sample_rate),
+                      "-f", "f32le", "pipe:1"])
+        samples = np.frombuffer(result.stdout[:len(result.stdout) // 4 * 4], dtype="<f4")
+        detail = result.stderr.decode("utf-8", "replace").strip()[-2000:]
+        if result.returncode != 0 or not len(samples):
+            raise RuntimeError(f"Cannot decode audio from {audio_path}: {detail or load_error}") from load_error
+        if not np.all(np.isfinite(samples)):
+            raise RuntimeError(f"Decoded audio from {audio_path} contains non-finite samples") from load_error
+        expected = seconds(stream.get("duration"))
+        decoded = len(samples) / sample_rate
+        if detail and expected and decoded < expected - max(.5, .02 * expected):
+            # FFmpeg exits 0 after a damaged or truncated container; do not analyze half a song.
+            raise RuntimeError(f"Only {decoded:.2f}s of the {expected:.2f}s of audio in {audio_path} "
+                               f"could be decoded: {detail}") from load_error
         return samples.astype(np.float32, copy=True), sample_rate
 
 

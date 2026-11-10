@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from scenedetect import ContentDetector, detect
 
 from editorial_feedback import SHOT_TYPES, normalize_shot_type
-from video_decode import decodable_path
+from video_decode import PROXY_RECIPE, decodable_path
 
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v", ".wmv", ".mts", ".m2ts"}
@@ -347,7 +347,9 @@ def _cached_analysis(source, cache):
         except PackageNotFoundError:
             libraries[name] = "unknown"
     digest = _hash_file(source)
-    identity = {"source_sha256": digest, "analyzer_sha256": _hash_file(__file__), "libraries": libraries}
+    # Measurements of a source OpenCV cannot decode are taken from its proxy (video_decode).
+    identity = {"source_sha256": digest, "analyzer_sha256": _hash_file(__file__), "libraries": libraries,
+                "decode_proxy": PROXY_RECIPE}
     key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
     directory = cache / key
     metadata = directory / "analysis.json"

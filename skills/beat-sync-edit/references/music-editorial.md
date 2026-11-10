@@ -118,3 +118,11 @@ project: replan, or use a `replace` revision ([project-workflow.md](project-work
 `analyze` caches measurements and thumbnails by source content in
 `<work>/library/analysis-cache/`, but never annotations: after a rerun without
 `--annotations`, run `annotate` again.
+
+A source OpenCV cannot decode (AV1 in the opencv-python wheels) is measured
+and tracked through a small H.264 proxy with the same frames and timestamps,
+built once with FFmpeg; the first `analyze` of such footage takes about as
+long as encoding it. Clips keep the original path and rendering reads the
+original. Proxies sit in the per-user cache beside the speech models
+(`.../beat-sync-edit/decode-proxies`, or `BEAT_SYNC_PROXY_DIR`); they are safe
+to delete, and one unused for 30 days is removed when another is built.

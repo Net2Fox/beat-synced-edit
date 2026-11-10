@@ -32,9 +32,12 @@ subjects when the source footage and directions are supplied.
   mixed photos/videos and several inputs in one analysis.
 - Recognized video extensions: MP4, MOV, MKV, WebM, AVI, M4V, WMV, MTS and M2TS.
   Recognized image extensions: JPG/JPEG, PNG, WebP, BMP and TIF/TIFF. Actual video
-  decoding still depends on the local FFmpeg/OpenCV build and source codec.
-- Use a separate local audio file as the soundtrack; common formats such as MP3,
-  WAV and FLAC depend on the installed audio decoders. Audio-mix settings can
+  decoding still depends on the local FFmpeg/OpenCV build and source codec;
+  a source OpenCV cannot decode (AV1) is analyzed and tracked through a cached
+  FFmpeg proxy and rendered from the original.
+- Use a local audio file as the soundtrack, or the audio track of a video file
+  (MP4, M4A, WebM, MKV); common formats such as MP3, WAV and FLAC depend on the
+  installed audio decoders. Audio-mix settings can
   preserve source sound and combine voice, music and effects; speech projects
   preserve their original speech by default.
 - Detect scene boundaries, sample frames and produce paginated contact sheets,
