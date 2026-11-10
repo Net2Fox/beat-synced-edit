@@ -7,6 +7,7 @@ and effects. Explicitly authorized slow motion uses optical-flow interpolation.
 from __future__ import annotations
 
 from copy import deepcopy
+import functools
 import hashlib
 import json
 import math
@@ -366,12 +367,31 @@ def _validate_plan(plan):
     return width, height, fps, cursor
 
 
+@functools.lru_cache(maxsize=None)
+def _frame_passthrough():
+    """The option that makes FFmpeg emit every decoded frame once, as this FFmpeg spells it.
+
+    "-fps_mode passthrough" replaced "-vsync 0" in FFmpeg 5.1 and FFmpeg 9 removed
+    "-vsync", so neither spelling works everywhere. The installed FFmpeg lists the
+    ones it accepts in its long help.
+    """
+    try:
+        listed = subprocess.run(["ffmpeg", "-hide_banner", "-h", "long"], capture_output=True, text=True,
+                                encoding="utf-8", errors="replace").stdout
+    except OSError:
+        listed = ""
+    options = {line.split()[0] for line in listed.splitlines() if line.startswith("-")}
+    if "-fps_mode" not in options and "-vsync" in options:
+        return ("-vsync", "0")
+    return ("-fps_mode", "passthrough")
+
+
 def _composite_tracks(manifest, output, compositor, width, height, fps, count, preview):
     """Burn text after cached shots, so changing a caption never rerenders shots."""
     with tempfile.TemporaryFile() as decode_log, tempfile.TemporaryFile() as encode_log:
         decoder = subprocess.Popen([
             "ffmpeg", "-v", "error", "-nostdin", "-threads", "1", "-f", "concat", "-safe", "0",
-            "-i", str(manifest), "-an", "-sn", "-dn", "-vsync", "0", "-threads", "1",
+            "-i", str(manifest), "-an", "-sn", "-dn", *_frame_passthrough(), "-threads", "1",
             "-f", "rawvideo", "-pix_fmt", "bgr24", "pipe:1"], stdout=subprocess.PIPE, stderr=decode_log)
         encoder = None
         try:

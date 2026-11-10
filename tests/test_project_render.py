@@ -12,6 +12,7 @@ import numpy as np
 from PIL import Image
 
 import _paths  # noqa: F401  (makes the skill's scripts importable)
+import project_render
 from project_render import (_OpticalFlowPair, _VideoReader, _display_size, _effect_frame,
                             _read_image, probe, render_project, source_times)
 
@@ -234,6 +235,48 @@ class RenderIntegrationTests(unittest.TestCase):
         plan.pop("subtitles")
         third = render_project(plan, self.work/"text-removed.mp4", cache_dir=cache)
         self.assertEqual((third["cache_hits"], third["frames"]), (3, 45))
+
+    def test_text_assembly_uses_the_frame_sync_option_this_ffmpeg_has(self):
+        # "-vsync 0" became "-fps_mode passthrough" in FFmpeg 5.1 and FFmpeg 9 removed "-vsync".
+        def long_help(*lines):
+            return subprocess.CompletedProcess([], 0, "Advanced global options:\n" + "\n".join(lines) + "\n", "")
+
+        cases = {("-fps_mode", "passthrough"): [
+                     long_help("-vsync              set video sync method globally; deprecated, use -fps_mode",
+                               "-fps_mode           set framerate mode for matching video streams"),   # 5.1 to 8
+                     long_help("-fps_mode           set framerate mode for matching video streams"),   # 9
+                     long_help("-y                  overwrite output files"),                           # help changed
+                     FileNotFoundError("ffmpeg")],
+                 ("-vsync", "0"): [long_help("-vsync              video sync method")]}                  # before 5.1
+        for expected, answers in cases.items():
+            for answer in answers:
+                project_render._frame_passthrough.cache_clear()
+                with patch.object(project_render.subprocess, "run", side_effect=[answer]):
+                    self.assertEqual(project_render._frame_passthrough(), expected)
+        project_render._frame_passthrough.cache_clear()
+        self.addCleanup(project_render._frame_passthrough.cache_clear)
+
+        plan = self.make_plan()
+        plan["titles"] = [{"id": "title", "text": "Привет, мир!", "start_frame": 0, "end_frame": 30}]
+        reference = render_project(plan, self.work/"sync-installed.mp4", cache_dir=self.work/"cache-sync")
+        real, commands = subprocess.Popen, []
+
+        def record(arguments, *positional, **options):
+            commands.append(list(arguments))
+            return real(arguments, *positional, **options)
+
+        for spelling in (("-fps_mode", "passthrough"), ("-vsync", "0")):
+            listed = subprocess.run(["ffmpeg", "-hide_banner", "-h", "long"], capture_output=True, text=True).stdout
+            if not any(line.startswith(spelling[0] + " ") for line in listed.splitlines()):
+                continue        # the installed FFmpeg does not know this spelling
+            commands.clear()
+            with patch.object(project_render, "_frame_passthrough", return_value=spelling), \
+                    patch.object(project_render.subprocess, "Popen", side_effect=record):
+                result = render_project(plan, self.work/f"sync{spelling[0]}.mp4", cache_dir=self.work/"cache-sync")
+            decoder = next(command for command in commands if "concat" in command)
+            self.assertEqual(decoder[decoder.index(spelling[0]) + 1], spelling[1])
+            self.assertFalse({"-fps_mode", "-vsync"} - {spelling[0]} & set(decoder))
+            self.assertEqual((result["frames"], result["cache_hits"]), (reference["frames"], 3))
 
     def test_preview_manual_subject_crop_and_contain(self):
         plan = self.make_plan()
