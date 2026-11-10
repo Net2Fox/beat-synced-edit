@@ -1,5 +1,6 @@
 """Music analysis reads a song from a video container as well as from an audio file."""
 
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -85,7 +86,7 @@ class ContainerAudioTests(unittest.TestCase):
 
     def test_truncated_container_is_not_analyzed_as_a_shorter_song(self):
         for name, codec in (("целый.m4a", ["-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart"]),
-                            ("целый.webm", ["-c:a", "libopus"])):
+                            ("целый.webm", ["-c:a", "libopus"]), ("целый.flac", ["-c:a", "flac"])):
             with self.subTest(name):
                 whole = self.root / name
                 ffmpeg("-i", str(self.wav), *codec, str(whole))
@@ -108,6 +109,56 @@ class ContainerAudioTests(unittest.TestCase):
         damaged.write_bytes(whole.read_bytes()[:middle + 1000])
         with self.assertRaisesRegex(RuntimeError, r"Only \d+\.\d+s of the 8\.\d+s of audio.*ends early"):
             _load_audio(damaged)
+
+    def test_whole_file_with_holes_in_the_audio_is_not_called_truncated(self):
+        # Clips joined by stream copy, the middle one silent: every packet is there, the timestamps skip 3 s.
+        parts = []
+        for index, start in enumerate((0, 4)):
+            parts.append(self.root / f"часть {index}.mp4")
+            ffmpeg("-f", "lavfi", "-i", "color=c=black:s=64x64:r=10:d=4", "-ss", str(start), "-t", "4", "-i", str(self.wav),
+                   "-c:v", "mpeg4", "-c:a", "aac", str(parts[-1]))
+        quiet = self.root / "тихая часть.mp4"
+        ffmpeg("-f", "lavfi", "-i", "color=c=black:s=64x64:r=10:d=3", "-c:v", "mpeg4", str(quiet))
+        listing = self.root / "список.txt"
+        listing.write_text("".join(f"file '{part.name}'\n" for part in (parts[0], quiet, parts[1])), encoding="utf-8")
+        joined = self.root / "склейка.mp4"
+        ffmpeg("-f", "concat", "-safe", "0", "-i", str(listing), "-c", "copy", str(joined))
+        with self.assertRaisesRegex(RuntimeError, r"has gaps.*11\.\d+s.*8\.\d+s.*-vn song\.wav") as caught:
+            _load_audio(joined)
+        self.assertNotIn("ends early", str(caught.exception))
+
+    def test_matroska_length_is_the_audio_streams_own(self):
+        # Audio (8 s) under a longer picture (20 s), joined by stream copy so FFmpeg prints an error-level
+        # line about timestamps although nothing is missing.
+        long_picture = self.root / "картинка длиннее.mkv"
+        ffmpeg("-f", "lavfi", "-i", "color=c=black:s=64x64:r=10:d=20", "-i", str(self.wav),
+               "-c:v", "mpeg4", "-c:a", "aac", str(long_picture))
+        real = subprocess.run
+
+        def without_duration_tag(arguments, **options):
+            result = real(arguments, **options)
+            if arguments[0] == "ffprobe" and "-show_entries" in arguments and b'"streams"' in result.stdout:
+                info = json.loads(result.stdout)
+                tags = info["streams"][0].get("tags") or {}
+                self.assertIn("DURATION", tags)
+                info["streams"][0]["tags"] = {"DURATION-eng": tags["DURATION"]} if self.language_tag else {}
+                result = subprocess.CompletedProcess(arguments, 0, json.dumps(info).encode(), b"")
+            elif arguments[0] == "ffmpeg":
+                result = subprocess.CompletedProcess(arguments, 0, result.stdout,
+                                                     b"[f32le] non monotonically increasing dts to muxer\n")
+            return result
+
+        for self.language_tag in (True, False):      # as mkvmerge wrote it; and no tag at all
+            with self.subTest(language_tag=self.language_tag):
+                with patch.object(beat_map.subprocess, "run", side_effect=without_duration_tag):
+                    self.assertAlmostEqual(len(_load_audio(long_picture)[0]) / 22050, 8, delta=.15)
+        # Timestamps that start after zero: the tag is the time the stream ends, not its length.
+        shifted = self.root / "со сдвигом.mkv"
+        ffmpeg("-i", str(long_picture), "-map", "0:a:0", "-c", "copy", "-output_ts_offset", "30", str(shifted))
+        with patch.object(beat_map.subprocess, "run", side_effect=lambda arguments, **options: (
+                lambda result: subprocess.CompletedProcess(arguments, 0, result.stdout, b"harmless line\n")
+                if arguments[0] == "ffmpeg" else result)(real(arguments, **options))):
+            self.assertAlmostEqual(len(_load_audio(shifted)[0]) / 22050, 8, delta=.15)
 
     def test_shorter_audio_and_estimated_durations_are_not_mistaken_for_damage(self):
         # Audio shorter than the picture is a complete file.

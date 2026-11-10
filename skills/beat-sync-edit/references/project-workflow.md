@@ -71,7 +71,9 @@ edit_project.py music <song> --duration 25 -o <work>/beats.json
 
 `<song>` is an audio file or a video whose first audio track is the song
 (MP4, M4A, WebM, MKV; decoded with FFmpeg). A video whose sound starts later
-than its picture is refused with the command that extracts the song first.
+than its picture, or has gaps in it, is refused with the command that
+extracts the song first; a file that ends early (a cut-off download) is
+refused too.
 `--duration` (default 25) picks the most energetic window of that length as
 `best_segment`; `plan` starts the audio there unless `--audio-start` is given,
 so pass the same duration to both. The map also holds beats, energy, beat

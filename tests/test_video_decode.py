@@ -256,6 +256,18 @@ class VideoDecodeTests(unittest.TestCase):
         self.assertEqual(again, proxy)
         self.assertEqual(self.frames(again)[0], 30)
 
+    def test_proxy_that_keeps_vanishing_is_an_error_not_a_dead_path(self):
+        source = self.make_video(self.root / "clip.avi")
+
+        def always_deleted(path, *arguments, **options):
+            Path(path).unlink()
+            raise FileNotFoundError(path)
+
+        with self.unreadable(source), patch.object(video_decode.os, "utime", side_effect=always_deleted):
+            with self.assertRaisesRegex(RuntimeError, "keeps disappearing"):
+                decodable_path(source)
+        self.assertEqual(video_decode._CHECKED, {})
+
     def test_changed_recipe_does_not_reuse_older_proxies(self):
         source = self.make_video(self.root / "clip.avi")
         with self.unreadable(source):

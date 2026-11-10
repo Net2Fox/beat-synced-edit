@@ -167,5 +167,8 @@ def decodable_path(path):
         except OSError:
             pass
         break
+    else:
+        raise RuntimeError(f"The decode proxy of {source} keeps disappearing from {folder}; "
+                           "another program is deleting files there")
     _CHECKED[key] = str(proxy)
     return _CHECKED[key]
