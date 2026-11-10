@@ -94,6 +94,28 @@ def find_top_segments(times, energy, target_duration=15.0, num_segments=3):
     return segments
 
 
+def _load_audio(audio_path, sample_rate=22050):
+    """Load mono audio at librosa's default rate, also from video containers.
+
+    soundfile reads WAV/FLAC/OGG/MP3 only and librosa 1.0 has no audioread
+    fallback, so a song inside MP4/M4A/WebM/MKV fails with "Format not
+    recognised". Decode those with the system FFmpeg, which the skill already
+    requires for rendering.
+    """
+    try:
+        return librosa.load(audio_path)
+    except Exception as load_error:  # soundfile.LibsndfileError, NoBackendError, ...
+        import subprocess
+        result = subprocess.run([
+            "ffmpeg", "-v", "error", "-nostdin", "-i", str(audio_path), "-map", "0:a:0", "-vn",
+            "-ac", "1", "-ar", str(sample_rate), "-f", "f32le", "pipe:1"], capture_output=True)
+        samples = np.frombuffer(result.stdout, dtype="<f4")
+        if result.returncode != 0 or not len(samples) or not np.all(np.isfinite(samples)):
+            detail = result.stderr.decode("utf-8", "replace").strip()
+            raise RuntimeError(f"Cannot decode audio from {audio_path}: {load_error}\n{detail}") from load_error
+        return samples.astype(np.float32, copy=True), sample_rate
+
+
 def analyze_audio(audio_path, hop_length=512, segment_duration=15.0, overrides=None):
     """
     Analyze audio file for beats, tempo, and energy.
@@ -103,7 +125,7 @@ def analyze_audio(audio_path, hop_length=512, segment_duration=15.0, overrides=N
     windows of segment_duration seconds) and music_structure (sections, pulse
     confidence and phrase candidates).
     """
-    y, sr = librosa.load(audio_path)
+    y, sr = _load_audio(audio_path)
     duration = librosa.get_duration(y=y, sr=sr)
 
     # Detect tempo and beats

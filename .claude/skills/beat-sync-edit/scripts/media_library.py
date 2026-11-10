@@ -21,6 +21,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from scenedetect import ContentDetector, detect
 
 from editorial_feedback import SHOT_TYPES, normalize_shot_type
+from video_decode import decodable_path
 
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v", ".wmv", ".mts", ".m2ts"}
@@ -179,9 +180,12 @@ def _clips_for_asset(asset, thumb_dir):
         capture = None
         still = load_image(source)
     else:
-        detected = detect(source, ContentDetector(threshold=27, min_scene_len=max(1, round(asset["fps"] * .25))))
+        # OpenCV's bundled FFmpeg cannot decode some codecs (AV1): measure a
+        # frame-identical proxy instead; the clip still points at the source.
+        readable = decodable_path(source)
+        detected = detect(readable, ContentDetector(threshold=27, min_scene_len=max(1, round(asset["fps"] * .25))))
         scenes = [(a.get_seconds(), b.get_seconds()) for a, b in detected] or [(0.0, asset["duration"])]
-        capture = cv2.VideoCapture(source)
+        capture = cv2.VideoCapture(readable)
         if not capture.isOpened():
             raise ValueError(f"Cannot decode video: {source}")
     clips = []

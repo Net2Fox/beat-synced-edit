@@ -163,7 +163,8 @@ def track_subject(path, start, end, subject=None, sample_fps=5):
         bbox = subject or [0, 0, 1, 1]
         return [{"time": float(start), "cx": bbox[0] + bbox[2] / 2, "cy": bbox[1] + bbox[3] / 2,
                  "bbox": bbox, "method": "manual_still" if subject else "center_still", "confidence": 1.0 if subject else 0.0}]
-    capture = cv2.VideoCapture(str(path))
+    from video_decode import decodable_path
+    capture = cv2.VideoCapture(decodable_path(path))
     if not capture.isOpened():
         raise ValueError(f"Cannot decode video: {path}")
     detector_path = Path(cv2.data.haarcascades) / "haarcascade_frontalface_default.xml"
